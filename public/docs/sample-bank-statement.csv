@@ -1,0 +1,6 @@
+Date,Description,Reference,Debit,Credit,Balance
+2026-03-10,Invoice payment from Acme Industries,DEMO-PAY-9001,,1290.00,61290.00
+2026-03-09,Adobe Creative Cloud,DEMO-EXP-9001,5000.00,,60000.00
+2026-03-11,Fuel and groceries mixed payment,DEMO-SPLIT-1001,1800.00,,58200.00
+2026-03-12,Office internet subscription,DEMO-UTIL-1002,750.00,,57450.00
+2026-03-13,Transfer to savings,DEMO-TRF-1003,2500.00,,54950.00

@@ -1,0 +1,4 @@
+date,kind,amount,taxRate,currency,description
+2026-03-01,INCOME,1250.50,7.5,NGN,Consulting fee
+2026-03-02,EXPENSE,250.00,0,NGN,Software subscription
+2026-03-03,INCOME,800.00,5,USD,Retainer
