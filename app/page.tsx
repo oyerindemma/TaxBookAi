@@ -20,7 +20,6 @@ import {
   HERO_STATS,
   HOME_FEATURE_BLOCKS,
   HOME_WORKFLOW_STEPS,
-  MARKETING_HEADLINE,
   MARKETING_SUBHEADLINE,
   VALUE_STRIP,
   WHO_IT_IS_FOR,
@@ -29,6 +28,35 @@ import {
 type SearchParams = {
   interval?: string | string[];
 };
+
+const TRUST_CHIPS = [
+  "AI bookkeeping automation",
+  "Bank reconciliation control",
+  "VAT and WHT visibility",
+  "Filing-ready workflows",
+  "Audit-friendly approvals",
+] as const;
+
+const SCREENSHOT_PANELS = [
+  {
+    title: "Books",
+    description: "AI drafts, review queues, posting controls, and accountant sign-off in one place.",
+  },
+  {
+    title: "Cash",
+    description: "Imported bank activity, suggested matches, and unresolved exceptions stay visible.",
+  },
+  {
+    title: "Tax",
+    description: "VAT, WHT, evidence packs, and filing readiness are surfaced before close pressure hits.",
+  },
+] as const;
+
+const SCREENSHOT_METRICS = [
+  { label: "Documents in review", value: "18 live" },
+  { label: "Suggested bank matches", value: "31 queued" },
+  { label: "Filing drafts ready", value: "2 prepared" },
+] as const;
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "AI Accounting Software for Nigerian Businesses",
@@ -64,30 +92,25 @@ export default async function HomePage({
         <div className="space-y-7">
           <div className="space-y-4">
             <Badge className="rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-white hover:bg-white/5">
-              Nigeria-first finance operating layer
+              Premium Nigeria-first finance operating layer
             </Badge>
             <h1 className="max-w-4xl text-5xl font-semibold tracking-tight text-balance text-white sm:text-6xl">
-              {MARKETING_HEADLINE}
+              Automate bookkeeping and tax compliance with AI.
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-white/65 sm:text-xl">
-              {MARKETING_SUBHEADLINE}
+              One operating layer for books, cash, and tax.
             </p>
             <p className="max-w-2xl text-base leading-7 text-white/60">
-              Built for businesses, finance teams, and accounting firms that want faster month-end
-              work without giving up review control, workspace structure, or audit visibility.
+              {MARKETING_SUBHEADLINE} Built for businesses, finance teams, and accounting firms
+              that want faster month-end work without giving up review control, workspace
+              structure, or audit visibility.
             </p>
           </div>
 
           <MarketingCTAGroup />
 
           <div className="flex flex-wrap gap-2">
-            {[
-              "AI receipt scanning",
-              "Bookkeeping review",
-              "Bank reconciliation",
-              "VAT and WHT summaries",
-              "Audit-friendly workflows",
-            ].map((item) => (
+            {TRUST_CHIPS.map((item) => (
               <Badge
                 key={item}
                 className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white/80 hover:bg-white/5"
@@ -144,6 +167,116 @@ export default async function HomePage({
 
       <section className="mx-auto max-w-6xl px-6 py-16">
         <SectionHeading
+          badge="Workspace screenshot"
+          title="One operating layer for books, cash, and tax."
+          description="This is the live-product story customers should see on the homepage: document capture, reconciliation, tax visibility, and filing prep in one premium dark workspace."
+        />
+        <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+          <Card className="overflow-hidden border-white/10 bg-white/5 text-white shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-xl">
+            <CardHeader className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Badge className="rounded-full border border-cyan/20 bg-cyan/10 px-3 py-1 text-cyan hover:bg-cyan/10">
+                  Product snapshot
+                </Badge>
+                <div className="text-xs uppercase tracking-[0.24em] text-white/45">
+                  Live workspace
+                </div>
+              </div>
+              <div className="space-y-2">
+                <CardTitle className="text-3xl text-white">
+                  Automate bookkeeping and tax compliance with AI.
+                </CardTitle>
+                <CardDescription className="max-w-2xl leading-7 text-white/60">
+                  Review receipts, reconcile bank activity, and close with VAT and WHT visibility
+                  from the same operating surface instead of stitching together generic SaaS tools.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-[28px] border border-white/10 bg-slate-950/90 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Finance command center</p>
+                    <p className="text-sm text-white/45">
+                      Books, cash, and tax stay connected.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="size-2.5 rounded-full bg-emerald-300" />
+                    <span className="size-2.5 rounded-full bg-cyan" />
+                    <span className="size-2.5 rounded-full bg-amber-300" />
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+                  <div className="grid gap-3">
+                    {SCREENSHOT_PANELS.map((panel) => (
+                      <div
+                        key={panel.title}
+                        className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold text-white">{panel.title}</p>
+                            <p className="text-sm leading-6 text-white/55">{panel.description}</p>
+                          </div>
+                          <div className="rounded-full border border-cyan/20 bg-cyan/10 px-2.5 py-1 text-xs font-medium text-cyan">
+                            Active
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid gap-3">
+                    {SCREENSHOT_METRICS.map((metric) => (
+                      <div
+                        key={metric.label}
+                        className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                      >
+                        <p className="text-xs uppercase tracking-[0.18em] text-white/45">
+                          {metric.label}
+                        </p>
+                        <p className="mt-3 text-2xl font-semibold text-white">{metric.value}</p>
+                      </div>
+                    ))}
+                    <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-emerald-200/80">
+                        Close signal
+                      </p>
+                      <p className="mt-3 text-base font-medium text-emerald-100">
+                        Month-end blockers are surfaced before filing week.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4">
+            <Card className="border-white/10 bg-slate-950 text-slate-50 shadow-[0_24px_80px_rgba(2,6,23,0.45)]">
+              <CardHeader className="space-y-3">
+                <Badge className="w-fit rounded-full bg-white/10 text-slate-50 hover:bg-white/10">
+                  Why this matters
+                </Badge>
+                <CardTitle className="text-2xl text-white">
+                  The homepage should show the actual product shape, not generic SaaS feature filler.
+                </CardTitle>
+                <CardDescription className="leading-7 text-slate-300">
+                  Customers need to see the real operating model: review queues, reconciliation,
+                  tax summaries, and filing-readiness in one interface.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <PreviewCardStack compact />
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <SectionHeading
           badge="How it works"
           title="From upload to filing-ready output, the workflow stays in one system."
           description="TaxBook AI is designed to help accountants and finance operators move from source documents into reviewed books, reconciled cash activity, tax summaries, and filing-ready outputs without stitching multiple tools together."
@@ -171,7 +304,7 @@ export default async function HomePage({
       <section className="mx-auto max-w-6xl px-6 py-16">
         <SectionHeading
           badge="Core modules"
-          title="The public story now matches what the product actually does."
+          title="Real product modules, not generic SaaS feature filler."
           description="These modules map directly to the product experience inside TaxBook AI today: AI capture, review, banking, tax visibility, filing workflows, client-business management, and grounded assistant support."
         />
         <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
