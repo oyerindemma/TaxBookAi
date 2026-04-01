@@ -15,7 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { BillingInterval } from "@/lib/billing";
-import { buildMarketingMetadata } from "@/lib/marketing-metadata";
+import { buildMarketingMetadata } from "../src/lib/marketing-metadata";
 import {
   HERO_STATS,
   HOME_FEATURE_BLOCKS,
