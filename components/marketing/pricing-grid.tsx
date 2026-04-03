@@ -85,10 +85,11 @@ export function PricingGrid({
             key={plan}
             className={
               isFeatured
-                ? "border-cyan/30 bg-white/[0.07] shadow-glow backdrop-blur-xl"
-                : "border-white/10 bg-white/5 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-xl"
+                ? "overflow-hidden border-cyan/30 bg-primary/60 shadow-glow backdrop-blur-2xl"
+                : "overflow-hidden border-white/10 bg-primary/45 shadow-[0_28px_100px_rgba(11,15,26,0.42)] backdrop-blur-2xl"
             }
           >
+            <div className={isFeatured ? "h-1.5 bg-gradient-primary" : "h-px bg-white/10"} />
             <CardHeader className={compact ? "space-y-3" : undefined}>
               <div className="flex items-center justify-between gap-3">
                 <CardTitle className="text-white">{config.name}</CardTitle>
@@ -160,7 +161,7 @@ export function PricingGrid({
                     className={
                       isFeatured
                         ? "w-full border-0 bg-gradient-primary text-white shadow-glow transition hover:opacity-90"
-                        : "w-full border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                        : "w-full border-white/15 bg-primary/40 text-white hover:bg-primary/55 hover:text-white"
                     }
                   />
                   {!isConfigured ? (
@@ -176,7 +177,7 @@ export function PricingGrid({
                   className={
                     isFeatured
                       ? "w-full border-0 bg-gradient-primary text-white shadow-glow transition hover:opacity-90"
-                      : "w-full border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                      : "w-full border-white/15 bg-primary/40 text-white hover:bg-primary/55 hover:text-white"
                   }
                   variant={isFeatured ? "default" : "outline"}
                 >
@@ -188,7 +189,7 @@ export function PricingGrid({
                   className={
                     isFeatured
                       ? "w-full border-0 bg-gradient-primary text-white shadow-glow transition hover:opacity-90"
-                      : "w-full border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                      : "w-full border-white/15 bg-primary/40 text-white hover:bg-primary/55 hover:text-white"
                   }
                   variant={isFeatured ? "default" : "outline"}
                 >
@@ -200,7 +201,7 @@ export function PricingGrid({
                   className={
                     isFeatured
                       ? "w-full border-0 bg-gradient-primary text-white shadow-glow transition hover:opacity-90"
-                      : "w-full border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                      : "w-full border-white/15 bg-primary/40 text-white hover:bg-primary/55 hover:text-white"
                   }
                   variant={isFeatured ? "default" : "outline"}
                 >

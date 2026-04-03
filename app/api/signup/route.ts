@@ -1,9 +1,9 @@
-import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import {
   buildSessionCookieOptions,
   createSession,
+  hashPassword,
   normalizeEmail,
   normalizeFullName,
   SESSION_COOKIE_NAME,
@@ -20,6 +20,9 @@ import {
 } from "@/lib/workspaces";
 
 export const runtime = "nodejs";
+
+const WORKSPACE_BOOTSTRAP_TIMEOUT_MS = 15_000;
+const AUTH_DEBUG_ENABLED = process.env.AUTH_DEBUG === "true";
 
 type SignupBody = {
   email?: unknown;
@@ -111,7 +114,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await hashPassword(password);
     const created = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -154,7 +157,7 @@ export async function POST(req: Request) {
         user,
         workspaceId: workspace.id,
       };
-    });
+    }, { timeout: WORKSPACE_BOOTSTRAP_TIMEOUT_MS });
 
     const { token, expiresAt } = await createSession(created.user.id);
     const response = NextResponse.json(
@@ -192,15 +195,19 @@ export async function POST(req: Request) {
       );
     }
 
+    const details = error instanceof Error ? error.message : String(error);
     logRouteError("/api/signup", error);
+
+    const errorMessage =
+      error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2028"
+        ? "Account setup could not finish because workspace setup timed out. Please try again."
+        : "We could not create your account right now. Please try again.";
 
     return NextResponse.json(
       {
-        error: "We could not create your account right now. Please try again.",
-        ...(process.env.NODE_ENV !== "production"
-          ? {
-              details: error instanceof Error ? error.message : String(error),
-            }
+        error: errorMessage,
+        ...((process.env.NODE_ENV !== "production" || AUTH_DEBUG_ENABLED)
+          ? { details }
           : {}),
       },
       { status: 500 }

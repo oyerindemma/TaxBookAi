@@ -19,17 +19,17 @@ export function PreviewCardStack({ compact = false }: PreviewCardStackProps) {
         <Card
           key={card.title}
           className={[
-            "overflow-hidden border-white/10 bg-white/5 text-white shadow-[0_24px_80px_rgba(15,23,42,0.3)] backdrop-blur-xl",
+            "overflow-hidden border-white/10 bg-primary/45 text-white shadow-[0_28px_100px_rgba(11,15,26,0.42)] backdrop-blur-2xl",
             index === 1 ? "lg:translate-x-8" : "",
             index === 2 ? "lg:-translate-x-6" : "",
           ]
             .filter(Boolean)
             .join(" ")}
         >
-          <div className={`bg-gradient-to-br from-white/[0.04] via-transparent to-cyan/10`}>
+          <div className="bg-gradient-to-br from-blue/16 via-transparent to-cyan/12">
             <CardHeader className={compact ? "space-y-3 pb-3" : "space-y-4"}>
               <div className="flex items-center justify-between gap-3">
-                <Badge className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white hover:bg-white/5">
+                <Badge className="rounded-full border border-white/10 bg-primary/40 px-3 py-1 text-white hover:bg-primary/50">
                   {card.eyebrow}
                 </Badge>
                 <div className="text-xs uppercase tracking-[0.24em] text-white/45">
@@ -49,7 +49,7 @@ export function PreviewCardStack({ compact = false }: PreviewCardStackProps) {
               {card.rows.map((row) => (
                 <div
                   key={`${card.title}-${row.label}`}
-                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3"
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-primary/55 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                 >
                   <span className="text-sm text-white/55">{row.label}</span>
                   <span className="text-sm font-semibold text-white">{row.value}</span>

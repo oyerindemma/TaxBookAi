@@ -13,7 +13,7 @@ model User {
   email                            String                     @unique
   password                         String
   fullName                         String
-  role                             String                     @default("USER")
+  role                             Role                       @default(USER)
   createdAt                        DateTime                   @default(now())
   sessions                         Session[]
   passwordResetTokens              PasswordResetToken[]
@@ -36,6 +36,12 @@ model User {
   reviewedFilingDrafts             FilingDraft[]              @relation("FilingDraftReviewer")
   filingEvidenceUploads            FilingEvidence[]           @relation("FilingEvidenceUploader")
   submissionLogs                   SubmissionLog[]            @relation("SubmissionLogActor")
+}
+
+enum Role {
+  USER
+  ADMIN
+  TEST
 }
 
 model Workspace {

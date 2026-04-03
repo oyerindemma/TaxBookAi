@@ -58,6 +58,21 @@ const SCREENSHOT_METRICS = [
   { label: "Filing drafts ready", value: "2 prepared" },
 ] as const;
 
+const GLASS_CARD_CLASSNAME =
+  "border-white/10 bg-primary/45 text-white shadow-[0_28px_100px_rgba(11,15,26,0.42)] backdrop-blur-2xl";
+
+const DEEP_CARD_CLASSNAME =
+  "border-white/10 bg-primary text-slate-50 shadow-[0_30px_120px_rgba(11,15,26,0.54)]";
+
+const PANEL_CLASSNAME =
+  "rounded-2xl border border-white/10 bg-primary/55 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
+
+const CYAN_BADGE_CLASSNAME =
+  "rounded-full border border-cyan/20 bg-cyan/10 px-3 py-1 text-cyan hover:bg-cyan/10";
+
+const WHITE_BADGE_CLASSNAME =
+  "rounded-full border border-white/10 bg-primary/40 px-3 py-1 text-white hover:bg-primary/50";
+
 export const metadata: Metadata = buildMarketingMetadata({
   title: "AI Accounting Software for Nigerian Businesses",
   description:
@@ -91,7 +106,7 @@ export default async function HomePage({
       <section className="mx-auto grid max-w-6xl gap-12 px-6 py-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)] lg:items-center">
         <div className="space-y-7">
           <div className="space-y-4">
-            <Badge className="rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-white hover:bg-white/5">
+            <Badge className="rounded-full border border-white/10 bg-primary/40 px-4 py-1.5 text-white hover:bg-primary/50">
               Premium Nigeria-first finance operating layer
             </Badge>
             <h1 className="max-w-4xl text-5xl font-semibold tracking-tight text-balance text-white sm:text-6xl">
@@ -111,10 +126,7 @@ export default async function HomePage({
 
           <div className="flex flex-wrap gap-2">
             {TRUST_CHIPS.map((item) => (
-              <Badge
-                key={item}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white/80 hover:bg-white/5"
-              >
+              <Badge key={item} className={WHITE_BADGE_CLASSNAME}>
                 {item}
               </Badge>
             ))}
@@ -122,10 +134,7 @@ export default async function HomePage({
 
           <div className="grid gap-3 sm:grid-cols-2">
             {HERO_STATS.map((item) => (
-              <Card
-                key={item.label}
-                className="border-white/10 bg-white/5 text-white shadow-[0_24px_80px_rgba(15,23,42,0.2)] backdrop-blur-xl"
-              >
+              <Card key={item.label} className={GLASS_CARD_CLASSNAME}>
                 <CardContent className="space-y-2 p-5">
                   <div className="text-xs uppercase tracking-[0.22em] text-white/45">
                     {item.label}
@@ -146,12 +155,9 @@ export default async function HomePage({
             const Icon = item.icon;
 
             return (
-              <Card
-                key={item.title}
-                className="border-white/10 bg-white/5 text-white shadow-[0_24px_80px_rgba(15,23,42,0.18)] backdrop-blur-xl"
-              >
+              <Card key={item.title} className={GLASS_CARD_CLASSNAME}>
                 <CardContent className="space-y-3 p-5">
-                  <div className="flex size-11 items-center justify-center rounded-2xl border border-cyan/20 bg-cyan/10 text-cyan">
+                  <div className="flex size-11 items-center justify-center rounded-2xl border border-cyan/20 bg-cyan/10 text-cyan shadow-glow">
                     <Icon className="size-5" />
                   </div>
                   <div className="space-y-1">
@@ -172,12 +178,11 @@ export default async function HomePage({
           description="This is the live-product story customers should see on the homepage: document capture, reconciliation, tax visibility, and filing prep in one premium dark workspace."
         />
         <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-          <Card className="overflow-hidden border-white/10 bg-white/5 text-white shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-xl">
+          <Card className={`overflow-hidden ${GLASS_CARD_CLASSNAME}`}>
+            <div className="h-1.5 bg-gradient-primary" />
             <CardHeader className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <Badge className="rounded-full border border-cyan/20 bg-cyan/10 px-3 py-1 text-cyan hover:bg-cyan/10">
-                  Product snapshot
-                </Badge>
+                <Badge className={CYAN_BADGE_CLASSNAME}>Product snapshot</Badge>
                 <div className="text-xs uppercase tracking-[0.24em] text-white/45">
                   Live workspace
                 </div>
@@ -193,7 +198,7 @@ export default async function HomePage({
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-[28px] border border-white/10 bg-slate-950/90 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <div className="rounded-[28px] border border-white/10 bg-primary/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                 <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
                   <div>
                     <p className="text-sm font-semibold text-white">Finance command center</p>
@@ -202,27 +207,22 @@ export default async function HomePage({
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <span className="size-2.5 rounded-full bg-emerald-300" />
+                    <span className="size-2.5 rounded-full bg-blue" />
                     <span className="size-2.5 rounded-full bg-cyan" />
-                    <span className="size-2.5 rounded-full bg-amber-300" />
+                    <span className="size-2.5 rounded-full bg-white/70" />
                   </div>
                 </div>
 
                 <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
                   <div className="grid gap-3">
                     {SCREENSHOT_PANELS.map((panel) => (
-                      <div
-                        key={panel.title}
-                        className="rounded-2xl border border-white/10 bg-white/5 p-4"
-                      >
+                      <div key={panel.title} className={PANEL_CLASSNAME}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="space-y-1">
                             <p className="text-sm font-semibold text-white">{panel.title}</p>
                             <p className="text-sm leading-6 text-white/55">{panel.description}</p>
                           </div>
-                          <div className="rounded-full border border-cyan/20 bg-cyan/10 px-2.5 py-1 text-xs font-medium text-cyan">
-                            Active
-                          </div>
+                          <div className={CYAN_BADGE_CLASSNAME}>Active</div>
                         </div>
                       </div>
                     ))}
@@ -230,21 +230,18 @@ export default async function HomePage({
 
                   <div className="grid gap-3">
                     {SCREENSHOT_METRICS.map((metric) => (
-                      <div
-                        key={metric.label}
-                        className="rounded-2xl border border-white/10 bg-white/5 p-4"
-                      >
+                      <div key={metric.label} className={PANEL_CLASSNAME}>
                         <p className="text-xs uppercase tracking-[0.18em] text-white/45">
                           {metric.label}
                         </p>
                         <p className="mt-3 text-2xl font-semibold text-white">{metric.value}</p>
                       </div>
                     ))}
-                    <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-emerald-200/80">
+                    <div className="rounded-2xl border border-cyan/20 bg-gradient-primary p-4 text-white shadow-glow">
+                      <p className="text-xs uppercase tracking-[0.18em] text-white/80">
                         Close signal
                       </p>
-                      <p className="mt-3 text-base font-medium text-emerald-100">
+                      <p className="mt-3 text-base font-medium text-white">
                         Month-end blockers are surfaced before filing week.
                       </p>
                     </div>
@@ -255,9 +252,9 @@ export default async function HomePage({
           </Card>
 
           <div className="grid gap-4">
-            <Card className="border-white/10 bg-slate-950 text-slate-50 shadow-[0_24px_80px_rgba(2,6,23,0.45)]">
+            <Card className={DEEP_CARD_CLASSNAME}>
               <CardHeader className="space-y-3">
-                <Badge className="w-fit rounded-full bg-white/10 text-slate-50 hover:bg-white/10">
+                <Badge className="w-fit rounded-full bg-primary/60 text-slate-50 hover:bg-primary/70">
                   Why this matters
                 </Badge>
                 <CardTitle className="text-2xl text-white">
@@ -283,12 +280,9 @@ export default async function HomePage({
         />
         <div className="mt-10 grid gap-4 lg:grid-cols-4">
           {HOME_WORKFLOW_STEPS.map((item) => (
-            <Card
-              key={item.step}
-              className="border-white/10 bg-white/5 text-white shadow-[0_24px_80px_rgba(15,23,42,0.2)] backdrop-blur-xl"
-            >
+            <Card key={item.step} className={GLASS_CARD_CLASSNAME}>
               <CardHeader>
-                <Badge className="w-fit rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white/80 hover:bg-white/5">
+                <Badge className="w-fit rounded-full border border-white/10 bg-primary/40 px-3 py-1 text-white/80 hover:bg-primary/50">
                   Step {item.step}
                 </Badge>
                 <CardTitle className="pt-4 text-2xl text-white">{item.title}</CardTitle>
@@ -312,16 +306,13 @@ export default async function HomePage({
             const Icon = item.icon;
 
             return (
-              <Card
-                key={item.title}
-                className="border-white/10 bg-white/5 text-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] backdrop-blur-xl"
-              >
+              <Card key={item.title} className={GLASS_CARD_CLASSNAME}>
                 <CardHeader className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex size-12 items-center justify-center rounded-2xl border border-cyan/20 bg-cyan/10 text-cyan">
+                    <div className="flex size-12 items-center justify-center rounded-2xl border border-cyan/20 bg-cyan/10 text-cyan shadow-glow">
                       <Icon className="size-5" />
                     </div>
-                    <Badge className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white hover:bg-white/5">
+                    <Badge className="rounded-full border border-white/10 bg-primary/40 px-3 py-1 text-white hover:bg-primary/50">
                       {item.badge}
                     </Badge>
                   </div>
@@ -336,7 +327,7 @@ export default async function HomePage({
                   {item.points.map((point) => (
                     <div
                       key={point}
-                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 leading-6"
+                      className="rounded-2xl border border-white/10 bg-primary/55 px-4 py-3 leading-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                     >
                       {point}
                     </div>
@@ -359,12 +350,9 @@ export default async function HomePage({
             const Icon = item.icon;
 
             return (
-              <Card
-                key={item.title}
-                className="border-white/10 bg-white/5 text-white shadow-[0_24px_80px_rgba(15,23,42,0.2)] backdrop-blur-xl"
-              >
+              <Card key={item.title} className={GLASS_CARD_CLASSNAME}>
                 <CardHeader className="space-y-4">
-                  <div className="flex size-12 items-center justify-center rounded-2xl border border-cyan/20 bg-cyan/10 text-cyan">
+                  <div className="flex size-12 items-center justify-center rounded-2xl border border-cyan/20 bg-cyan/10 text-cyan shadow-glow">
                     <Icon className="size-5" />
                   </div>
                   <div className="space-y-2">
@@ -378,7 +366,7 @@ export default async function HomePage({
                   {item.outcomes.map((outcome) => (
                     <div
                       key={outcome}
-                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 leading-6"
+                      className="rounded-2xl border border-white/10 bg-primary/55 px-4 py-3 leading-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                     >
                       {outcome}
                     </div>
@@ -403,7 +391,7 @@ export default async function HomePage({
                 className={
                   interval === "MONTHLY"
                     ? "border-0 bg-gradient-primary text-white shadow-glow transition hover:opacity-90"
-                    : "border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                    : "border-white/15 bg-primary/40 text-white hover:bg-primary/55 hover:text-white"
                 }
               >
                 <Link href="/?interval=monthly">Monthly</Link>
@@ -414,7 +402,7 @@ export default async function HomePage({
                 className={
                   interval === "ANNUAL"
                     ? "border-0 bg-gradient-primary text-white shadow-glow transition hover:opacity-90"
-                    : "border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                    : "border-white/15 bg-primary/40 text-white hover:bg-primary/55 hover:text-white"
                 }
               >
                 <Link href="/?interval=annual">Annual</Link>
@@ -428,10 +416,12 @@ export default async function HomePage({
       </section>
 
       <section className="mx-auto max-w-6xl px-6 py-16">
-        <Card className="overflow-hidden border-white/10 bg-slate-950 text-slate-50 shadow-[0_24px_80px_rgba(2,6,23,0.45)]">
-          <CardContent className="flex flex-col gap-8 p-8 lg:flex-row lg:items-end lg:justify-between">
+        <Card className={`relative overflow-hidden ${DEEP_CARD_CLASSNAME} shadow-glow`}>
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-primary" />
+          <div className="absolute -right-24 top-0 h-48 w-48 rounded-full bg-cyan/15 blur-3xl" />
+          <CardContent className="relative flex flex-col gap-8 p-8 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-4">
-              <Badge className="w-fit rounded-full bg-white/10 text-slate-50 hover:bg-white/10">
+              <Badge className="w-fit rounded-full bg-primary/60 text-slate-50 hover:bg-primary/70">
                 Launch-ready public site
               </Badge>
               <div className="space-y-3">

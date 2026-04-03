@@ -18,6 +18,42 @@ import { Label } from "@/components/ui/label";
 type FieldErrors = Partial<
   Record<"fullName" | "email" | "password" | "confirmPassword", string>
 >;
+type SignupResponse = {
+  error?: string;
+  details?: string;
+  fieldErrors?: FieldErrors;
+};
+
+async function parseSignupResponse(res: Response) {
+  const contentType = res.headers.get("content-type") ?? "";
+
+  if (contentType.toLowerCase().includes("application/json")) {
+    try {
+      return {
+        data: (await res.json()) as SignupResponse,
+        fallbackText: null,
+      };
+    } catch {
+      return {
+        data: null,
+        fallbackText: null,
+      };
+    }
+  }
+
+  try {
+    const text = (await res.text()).trim();
+    return {
+      data: null,
+      fallbackText: text || null,
+    };
+  } catch {
+    return {
+      data: null,
+      fallbackText: null,
+    };
+  }
+}
 
 function getSafeNextPath(raw: string | null) {
   if (!raw) return null;
@@ -40,6 +76,8 @@ export default function SignupForm() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
+
     setLoading(true);
     setMessage(null);
     setFieldErrors({});
@@ -51,11 +89,16 @@ export default function SignupForm() {
         body: JSON.stringify({ fullName, email, password, confirmPassword }),
       });
 
-      const data = await res.json();
+      const { data, fallbackText } = await parseSignupResponse(res);
 
       if (!res.ok) {
-        setMessage(data?.error ?? "Signup failed.");
-        setFieldErrors((data?.fieldErrors ?? {}) as FieldErrors);
+        setMessage(
+          data?.details?.trim() ||
+            data?.error?.trim() ||
+            fallbackText ||
+            `Signup failed with status ${res.status}.`
+        );
+        setFieldErrors(data?.fieldErrors ?? {});
         return;
       }
 
@@ -177,10 +220,15 @@ export default function SignupForm() {
                 ) : null}
               </div>
 
-              {message ? <p className="text-sm text-rose-300">{message}</p> : null}
+              {message ? (
+                <p role="alert" className="text-sm text-rose-300">
+                  {message}
+                </p>
+              ) : null}
 
               <Button
                 disabled={loading}
+                aria-busy={loading}
                 type="submit"
                 className="w-full border-0 bg-gradient-primary text-white shadow-glow transition hover:opacity-90"
               >
