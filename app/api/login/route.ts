@@ -24,7 +24,6 @@ type LoginBody = {
 };
 
 const WORKSPACE_BOOTSTRAP_TIMEOUT_MS = 15_000;
-// TEMP_DEBUG: set AUTH_DEBUG=true to trace the login flow while investigating auth failures.
 const LOGIN_DEBUG_ENABLED = process.env.AUTH_DEBUG === "true";
 
 function logLoginDebug(message: string, metadata?: Record<string, unknown>) {
@@ -104,6 +103,7 @@ export async function POST(req: Request) {
     }
 
     const passwordMatches = await verifyPassword(inputPassword, user.password);
+
     logLoginDebug("Completed password comparison", {
       userId: user.id,
       passwordMatches,
@@ -123,8 +123,14 @@ export async function POST(req: Request) {
           archivedAt: null,
         },
       },
-      orderBy: { workspace: { name: "asc" } },
-      select: { workspaceId: true },
+      orderBy: {
+        workspace: {
+          name: "asc",
+        },
+      },
+      select: {
+        workspaceId: true,
+      },
     });
 
     logLoginDebug("Checked active workspace membership", {
@@ -150,32 +156,40 @@ export async function POST(req: Request) {
           timeoutMs: WORKSPACE_BOOTSTRAP_TIMEOUT_MS,
         });
 
-        const workspace = await prisma.$transaction(async (tx) => {
-          const createdWorkspace = await tx.workspace.create({
-            data: {
-              name: `${user.fullName}'s Workspace`,
-              members: {
-                create: {
-                  userId: user.id,
-                  role: "OWNER",
-                },
+        const workspace = await prisma.$transaction(
+          async (tx) => {
+            const createdWorkspace = await tx.workspace.create({
+              data: {
+                name: `${user.fullName}'s Workspace`,
               },
-              subscription: {
-                create: {
-                  plan: "STARTER",
-                  status: "free",
-                },
+              select: { id: true },
+            });
+
+            await tx.workspaceMember.create({
+              data: {
+                workspaceId: createdWorkspace.id,
+                userId: user.id,
+                role: "OWNER",
               },
-            },
-            select: { id: true },
-          });
+            });
 
-          await seedDefaultExpenseCategories(tx, createdWorkspace.id);
+            await tx.workspaceSubscription.create({
+              data: {
+                workspaceId: createdWorkspace.id,
+                plan: "STARTER",
+                status: "free",
+              },
+            });
 
-          return createdWorkspace;
-        }, { timeout: WORKSPACE_BOOTSTRAP_TIMEOUT_MS });
+            await seedDefaultExpenseCategories(tx, createdWorkspace.id);
+
+            return createdWorkspace;
+          },
+          { timeout: WORKSPACE_BOOTSTRAP_TIMEOUT_MS }
+        );
 
         workspaceId = workspace.id;
+
         logLoginDebug("Bootstrapped default workspace", {
           userId: user.id,
           workspaceId,
@@ -184,6 +198,7 @@ export async function POST(req: Request) {
     }
 
     const { token, expiresAt } = await createSession(user.id);
+
     logLoginDebug("Created session for login response", {
       userId: user.id,
       expiresAt: expiresAt.toISOString(),
@@ -216,18 +231,25 @@ export async function POST(req: Request) {
 
     return response;
   } catch (error) {
-    const details = error instanceof Error ? error.message : String(error);
     logRouteError("/api/login", error);
-    logLoginDebug("Login request failed", { details });
 
-    const errorMessage =
-      error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2028"
-        ? "Login could not finish because workspace setup timed out. Please try again."
-        : "We could not log you in right now. Please try again.";
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return NextResponse.json(
+        {
+          error: "Database error during login",
+          code: error.code,
+          message: error.message,
+        },
+        { status: 400 }
+      );
+    }
+
+    const details = error instanceof Error ? error.message : String(error);
+    logLoginDebug("Login request failed", { details });
 
     return NextResponse.json(
       {
-        error: errorMessage,
+        error: "We could not log you in right now. Please try again.",
         ...((process.env.NODE_ENV !== "production" || LOGIN_DEBUG_ENABLED)
           ? { details }
           : {}),
