@@ -237,10 +237,11 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: "Database error during login",
-          code: error.code,
-          message: error.message,
+          prismaCode: error.code,
+          prismaMessage: error.message,
+          prismaMeta: error.meta ?? null,
         },
-        { status: 400 }
+        { status: 500 }
       );
     }
 
@@ -250,9 +251,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error: "We could not log you in right now. Please try again.",
-        ...((process.env.NODE_ENV !== "production" || LOGIN_DEBUG_ENABLED)
-          ? { details }
-          : {}),
+        details,
       },
       { status: 500 }
     );
