@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, Role, SubscriptionPlan, WorkspaceRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 import {
   buildSessionCookieOptions,
@@ -30,6 +30,60 @@ type SignupBody = {
   fullName?: unknown;
   confirmPassword?: unknown;
 };
+
+const CREATED_USER_SELECT = {
+  id: true,
+  email: true,
+  fullName: true,
+  role: true,
+  createdAt: true,
+} satisfies Prisma.UserSelect;
+
+function getPrismaErrorMetadata(error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return {
+      type: "known_request",
+      code: error.code,
+      clientVersion: error.clientVersion,
+      meta: error.meta ?? null,
+      message: error.message,
+    };
+  }
+
+  if (error instanceof Prisma.PrismaClientValidationError) {
+    return {
+      type: "validation",
+      message: error.message,
+    };
+  }
+
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    return {
+      type: "initialization",
+      errorCode: error.errorCode ?? null,
+      clientVersion: error.clientVersion,
+      message: error.message,
+    };
+  }
+
+  if (error instanceof Prisma.PrismaClientRustPanicError) {
+    return {
+      type: "rust_panic",
+      clientVersion: error.clientVersion,
+      message: error.message,
+    };
+  }
+
+  if (error instanceof Prisma.PrismaClientUnknownRequestError) {
+    return {
+      type: "unknown_request",
+      clientVersion: error.clientVersion,
+      message: error.message,
+    };
+  }
+
+  return null;
+}
 
 function buildValidationResult(body: SignupBody) {
   const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
@@ -116,39 +170,45 @@ export async function POST(req: Request) {
 
     const hashedPassword = await hashPassword(password);
     const created = await prisma.$transaction(async (tx) => {
+      const userData = {
+        email,
+        password: hashedPassword,
+        fullName,
+        role: Role.USER,
+      } satisfies Prisma.UserCreateInput;
+
       const user = await tx.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-          fullName,
-          role: "USER",
-        },
-        select: {
-          id: true,
-          email: true,
-          fullName: true,
-          role: true,
-          createdAt: true,
-        },
+        data: userData,
+        select: CREATED_USER_SELECT,
       });
 
+      const workspaceData = {
+        name: `${fullName}'s Workspace`,
+      } satisfies Prisma.WorkspaceCreateInput;
+
       const workspace = await tx.workspace.create({
-        data: {
-          name: `${fullName}'s Workspace`,
-          members: {
-            create: {
-              userId: user.id,
-              role: "OWNER",
-            },
-          },
-          subscription: {
-            create: {
-              plan: "STARTER",
-              status: "free",
-            },
-          },
-        },
+        data: workspaceData,
         select: { id: true },
+      });
+
+      const workspaceMemberData = {
+        workspaceId: workspace.id,
+        userId: user.id,
+        role: WorkspaceRole.OWNER,
+      } satisfies Prisma.WorkspaceMemberUncheckedCreateInput;
+
+      await tx.workspaceMember.create({
+        data: workspaceMemberData,
+      });
+
+      const workspaceSubscriptionData = {
+        workspaceId: workspace.id,
+        plan: SubscriptionPlan.STARTER,
+        status: "free",
+      } satisfies Prisma.WorkspaceSubscriptionUncheckedCreateInput;
+
+      await tx.workspaceSubscription.create({
+        data: workspaceSubscriptionData,
       });
 
       await seedDefaultExpenseCategories(tx, workspace.id);
@@ -196,7 +256,22 @@ export async function POST(req: Request) {
     }
 
     const details = error instanceof Error ? error.message : String(error);
-    logRouteError("/api/signup", error);
+    const prismaError = getPrismaErrorMetadata(error);
+    const prismaDebug =
+      prismaError &&
+      "message" in prismaError &&
+      typeof prismaError.message === "string"
+        ? {
+            prismaCode:
+              "code" in prismaError && typeof prismaError.code === "string"
+                ? prismaError.code
+                : "errorCode" in prismaError && typeof prismaError.errorCode === "string"
+                  ? prismaError.errorCode
+                  : null,
+            prismaMessage: prismaError.message,
+          }
+        : null;
+    logRouteError("/api/signup", error, prismaError ? { prisma: prismaError } : undefined);
 
     const errorMessage =
       error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2028"
@@ -207,7 +282,10 @@ export async function POST(req: Request) {
       {
         error: errorMessage,
         ...((process.env.NODE_ENV !== "production" || AUTH_DEBUG_ENABLED)
-          ? { details }
+          ? {
+              details,
+              ...(prismaDebug ? { prisma: prismaDebug } : {}),
+            }
           : {}),
       },
       { status: 500 }
