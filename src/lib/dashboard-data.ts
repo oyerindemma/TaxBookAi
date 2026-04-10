@@ -1,11 +1,21 @@
 import "server-only";
 
-import type { Prisma, TaxType } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type {
   DashboardExpenseCategoryRow,
   DashboardMonthlyTrendRow,
 } from "@/lib/tax-reporting";
+import { logError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import {
+  getDashboardTaxCardSnapshot,
+  type DashboardTaxCardSnapshot,
+} from "@/lib/transaction-tax";
+import {
+  hasPrismaDatabaseSupport,
+  isPrismaSchemaCompatibilityError,
+} from "@/lib/prisma-schema-compat";
+import { getUserWorkspaceSummary, type WorkspaceRole } from "@/lib/workspaces";
 
 export type {
   DashboardExpenseCategoryRow,
@@ -13,8 +23,46 @@ export type {
 } from "@/lib/tax-reporting";
 
 const DASHBOARD_MONTH_COUNT = 6;
-const OPEN_TAX_PERIOD_STATUSES = ["OPEN", "IN_REVIEW", "READY"] as const;
-const OPEN_TAX_TYPES = ["VAT", "WHT"] as const satisfies TaxType[];
+const DASHBOARD_RECENT_ACTIVITY_LIMIT = 10;
+const DASHBOARD_DATA_SCHEMA_TABLES = [
+  "Workspace",
+  "WorkspaceMember",
+  "WorkspaceSubscription",
+  "BusinessProfile",
+  "WorkspaceOnboarding",
+  "ClientBusiness",
+  "TransactionCategory",
+  "LedgerTransaction",
+  "BankAccount",
+  "BankTransaction",
+  "TaxRecord",
+] as const;
+const DASHBOARD_DATA_SCHEMA_COLUMNS = [
+  "Workspace.",
+  "WorkspaceMember.",
+  "WorkspaceSubscription.",
+  "BusinessProfile.",
+  "WorkspaceOnboarding.",
+  "ClientBusiness.",
+  "TransactionCategory.",
+  "LedgerTransaction.",
+  "BankAccount.",
+  "BankTransaction.",
+  "TaxRecord.",
+] as const;
+const DASHBOARD_TAX_CARD_SUPPORT = {
+  tables: ["BankTransaction"],
+  columns: [
+    "BankTransaction.reviewStatus",
+    "BankTransaction.vatTreatment",
+    "BankTransaction.whtTreatment",
+    "BankTransaction.vatRate",
+    "BankTransaction.whtRate",
+    "BankTransaction.vatAmountMinor",
+    "BankTransaction.whtAmountMinor",
+    "BankTransaction.taxTreatmentSource",
+  ],
+} as const;
 
 const dashboardLedgerSelect = {
   id: true,
@@ -54,8 +102,16 @@ export type DashboardKpiData = {
   totalExpensesMinor: number;
   netProfitMinor: number;
   taxDueMinor: number;
+  vatDueMinor: number;
+  whtDueMinor: number;
+  vatNetMinor: number;
+  whtPayableMinor: number;
+  taxSummaryDateLabel: string;
+  taxSummaryGeneratedAt: string | null;
   currency: string;
-  taxDueUsesFallback: boolean;
+  vatDueExplanation: string;
+  whtDueExplanation: string;
+  totalDueExplanation: string;
 };
 
 export type DashboardData = {
@@ -67,6 +123,121 @@ export type DashboardData = {
   expenseCategorizationRate: number;
   recordCount: number;
 };
+
+export type DashboardWorkspaceSummary = {
+  workspaceId: number;
+  workspaceName: string;
+  role: WorkspaceRole;
+  clientBusinessCount: number;
+  membersCount: number;
+  taxRecordsCount: number;
+  trackedTransactionCount: number;
+  representedCategoryCount: number;
+  expenseCategoryCount: number;
+  recentTransactionCount: number;
+  lastTransactionAt: Date | null;
+  expenseCategorizationRate: number;
+};
+
+export type DashboardPageData = {
+  dashboard: DashboardData;
+  workspaceSummary: DashboardWorkspaceSummary | null;
+  errorMessage: string | null;
+};
+
+function isDashboardDataSchemaCompatibilityError(error: unknown) {
+  return isPrismaSchemaCompatibilityError(error, {
+    tables: [...DASHBOARD_DATA_SCHEMA_TABLES],
+    columns: [...DASHBOARD_DATA_SCHEMA_COLUMNS],
+  });
+}
+
+async function runDashboardDataQuerySafely<T>(input: {
+  workspaceId: number;
+  label: string;
+  query: Promise<T>;
+  fallback: () => T;
+  support?: {
+    tables?: readonly string[];
+    columns?: readonly string[];
+  };
+}) {
+  if (input.support && !(await hasPrismaDatabaseSupport(input.support))) {
+    return input.fallback();
+  }
+
+  try {
+    return await input.query;
+  } catch (error) {
+    logError(
+      "dashboard-data",
+      `Dashboard ${input.label} failed; using a safe fallback.`,
+      error,
+      {
+        workspaceId: input.workspaceId,
+        schemaCompatibilityError: isDashboardDataSchemaCompatibilityError(error),
+      }
+    );
+
+    return input.fallback();
+  }
+}
+
+function buildEmptyDashboardData(scope: DashboardData["scope"]): DashboardData {
+  return {
+    scope,
+    kpis: {
+      totalRevenueMinor: 0,
+      totalExpensesMinor: 0,
+      netProfitMinor: 0,
+      taxDueMinor: 0,
+      vatDueMinor: 0,
+      whtDueMinor: 0,
+      vatNetMinor: 0,
+      whtPayableMinor: 0,
+      taxSummaryDateLabel: "Current month",
+      taxSummaryGeneratedAt: null,
+      currency: "NGN",
+      vatDueExplanation: "VAT due will appear here once workspace transactions are available.",
+      whtDueExplanation: "WHT due will appear here once workspace transactions are available.",
+      totalDueExplanation:
+        "Total live tax due will appear here once workspace transactions are available.",
+    },
+    chart: buildMonthlyTrendRows([]),
+    expenseBreakdown: [],
+    recentActivity: [],
+    expenseCategorizationRate: 0,
+    recordCount: 0,
+  };
+}
+
+function buildEmptyDashboardTaxCardSnapshot(): DashboardTaxCardSnapshot {
+  const generatedAt = new Date().toISOString();
+
+  return {
+    dateLabel: "Current month",
+    vatNetMinor: 0,
+    whtPayableMinor: 0,
+    vatDueMinor: 0,
+    whtDueMinor: 0,
+    totalDueMinor: 0,
+    whtReceivableMinor: 0,
+    estimatedTaxExposureMinor: 0,
+    vatDueExplanation: "VAT due will appear here once workspace transactions are available.",
+    whtDueExplanation: "WHT due will appear here once workspace transactions are available.",
+    totalDueExplanation:
+      "Total live tax due will appear here once workspace transactions are available.",
+    generatedAt,
+  };
+}
+
+function buildEmptyDashboardPageData(scope: DashboardData["scope"]): DashboardPageData {
+  return {
+    dashboard: buildEmptyDashboardData(scope),
+    workspaceSummary: null,
+    errorMessage: null,
+  };
+}
 
 function isTaxEntry(record: DashboardLedgerRecord) {
   return record.taxCategory === "TAX_PAYMENT";
@@ -248,58 +419,6 @@ function buildRecentActivity(records: DashboardLedgerRecord[]): DashboardRecentA
   }));
 }
 
-async function getTaxDueMinor(workspaceId?: number | null) {
-  if (!workspaceId) {
-    return {
-      taxDueMinor: 0,
-      taxDueUsesFallback: true,
-    };
-  }
-
-  const openTaxComputations = await prisma.taxComputation.findMany({
-    where: {
-      workspaceId,
-      taxType: {
-        in: [...OPEN_TAX_TYPES],
-      },
-      taxPeriod: {
-        status: {
-          in: [...OPEN_TAX_PERIOD_STATUSES],
-        },
-      },
-    },
-    select: {
-      taxType: true,
-      netVatMinor: true,
-      whtDeductedMinor: true,
-    },
-  });
-
-  if (openTaxComputations.length === 0) {
-    return {
-      taxDueMinor: 0,
-      taxDueUsesFallback: false,
-    };
-  }
-
-  const taxDueMinor = openTaxComputations.reduce((sum, computation) => {
-    if (computation.taxType === "VAT") {
-      return sum + Math.max(computation.netVatMinor, 0);
-    }
-
-    if (computation.taxType === "WHT") {
-      return sum + Math.max(computation.whtDeductedMinor, 0);
-    }
-
-    return sum;
-  }, 0);
-
-  return {
-    taxDueMinor,
-    taxDueUsesFallback: false,
-  };
-}
-
 export async function getDashboardData(input: {
   userId: number;
   workspaceId?: number | null;
@@ -307,90 +426,162 @@ export async function getDashboardData(input: {
   const scope = input.workspaceId ? "workspace" : "user";
 
   if (!input.workspaceId) {
-    const taxDue = await getTaxDueMinor(null);
+    return buildEmptyDashboardData(scope);
+  }
+
+  try {
+    const ledgerWhere = {
+      clientBusiness: {
+        workspaceId: input.workspaceId,
+        archivedAt: null,
+      },
+      OR: [
+        {
+          reviewStatus: "POSTED" as const,
+        },
+        {
+          taxCategory: "TAX_PAYMENT" as const,
+        },
+      ],
+    } satisfies Prisma.LedgerTransactionWhereInput;
+
+    const [records, taxCards] = await Promise.all([
+      runDashboardDataQuerySafely({
+        workspaceId: input.workspaceId,
+        label: "ledger transactions query",
+        query: prisma.ledgerTransaction.findMany({
+          where: ledgerWhere,
+          select: dashboardLedgerSelect,
+          orderBy: {
+            transactionDate: "desc",
+          },
+        }),
+        fallback: () => [],
+      }),
+      runDashboardDataQuerySafely({
+        workspaceId: input.workspaceId,
+        label: "tax cards query",
+        support: DASHBOARD_TAX_CARD_SUPPORT,
+        query: getDashboardTaxCardSnapshot(input.workspaceId),
+        fallback: buildEmptyDashboardTaxCardSnapshot,
+      }),
+    ]);
+    const recentRecords = records.slice(0, DASHBOARD_RECENT_ACTIVITY_LIMIT);
+
+    const totalRevenueMinor = records.reduce((sum, record) => {
+      return getRecordType(record) === "INCOME" ? sum + record.amountMinor : sum;
+    }, 0);
+
+    const totalExpensesMinor = records.reduce((sum, record) => {
+      return getRecordType(record) === "EXPENSE" ? sum + record.amountMinor : sum;
+    }, 0);
+
+    const expenseRecords = records.filter((record) => getRecordType(record) === "EXPENSE");
+    const categorizedExpenseCount = expenseRecords.filter((record) =>
+      Boolean(record.category?.name?.trim())
+    ).length;
 
     return {
       scope,
       kpis: {
-        totalRevenueMinor: 0,
-        totalExpensesMinor: 0,
-        netProfitMinor: 0,
-        taxDueMinor: taxDue.taxDueMinor,
-        currency: "NGN",
-        taxDueUsesFallback: taxDue.taxDueUsesFallback,
+        totalRevenueMinor,
+        totalExpensesMinor,
+        netProfitMinor: totalRevenueMinor - totalExpensesMinor,
+        taxDueMinor: taxCards.totalDueMinor,
+        vatDueMinor: taxCards.vatDueMinor,
+        whtDueMinor: taxCards.whtDueMinor,
+        vatNetMinor: taxCards.vatNetMinor,
+        whtPayableMinor: taxCards.whtPayableMinor,
+        taxSummaryDateLabel: taxCards.dateLabel,
+        taxSummaryGeneratedAt: taxCards.generatedAt,
+        currency: resolveCurrency(records),
+        vatDueExplanation: taxCards.vatDueExplanation,
+        whtDueExplanation: taxCards.whtDueExplanation,
+        totalDueExplanation: taxCards.totalDueExplanation,
       },
-      chart: buildMonthlyTrendRows([]),
-      expenseBreakdown: [],
-      recentActivity: [],
-      expenseCategorizationRate: 0,
-      recordCount: 0,
+      chart: buildMonthlyTrendRows(records),
+      expenseBreakdown: buildExpenseBreakdown(records),
+      recentActivity: buildRecentActivity(recentRecords),
+      expenseCategorizationRate:
+        expenseRecords.length === 0 ? 0 : categorizedExpenseCount / expenseRecords.length,
+      recordCount: records.length,
     } satisfies DashboardData;
-  }
-
-  const ledgerWhere = {
-    clientBusiness: {
+  } catch (error) {
+    logError("dashboard-data", "Failed to load dashboard data; returning empty KPI data.", error, {
+      userId: input.userId,
       workspaceId: input.workspaceId,
-      archivedAt: null,
-    },
-    OR: [
-      {
-        reviewStatus: "POSTED" as const,
-      },
-      {
-        taxCategory: "TAX_PAYMENT" as const,
-      },
-    ],
-  } satisfies Prisma.LedgerTransactionWhereInput;
+    });
 
-  const [records, recentRecords, taxDue] = await Promise.all([
-    prisma.ledgerTransaction.findMany({
-      where: ledgerWhere,
-      select: dashboardLedgerSelect,
-      orderBy: {
-        transactionDate: "desc",
-      },
-    }),
-    prisma.ledgerTransaction.findMany({
-      where: ledgerWhere,
-      select: dashboardLedgerSelect,
-      orderBy: {
-        transactionDate: "desc",
-      },
-      take: 10,
-    }),
-    getTaxDueMinor(input.workspaceId),
-  ]);
-
-  const totalRevenueMinor = records.reduce((sum, record) => {
-    return getRecordType(record) === "INCOME" ? sum + record.amountMinor : sum;
-  }, 0);
-
-  const totalExpensesMinor = records.reduce((sum, record) => {
-    return getRecordType(record) === "EXPENSE" ? sum + record.amountMinor : sum;
-  }, 0);
-
-  const expenseRecords = records.filter((record) => getRecordType(record) === "EXPENSE");
-  const categorizedExpenseCount = expenseRecords.filter((record) =>
-    Boolean(record.category?.name?.trim())
-  ).length;
-
-  return {
-    scope,
-    kpis: {
-      totalRevenueMinor,
-      totalExpensesMinor,
-      netProfitMinor: totalRevenueMinor - totalExpensesMinor,
-      taxDueMinor: taxDue.taxDueMinor,
-      currency: resolveCurrency(records),
-      taxDueUsesFallback: taxDue.taxDueUsesFallback,
-    },
-    chart: buildMonthlyTrendRows(records),
-    expenseBreakdown: buildExpenseBreakdown(records),
-    recentActivity: buildRecentActivity(recentRecords),
-    expenseCategorizationRate:
-      expenseRecords.length === 0 ? 0 : categorizedExpenseCount / expenseRecords.length,
-    recordCount: records.length,
-  } satisfies DashboardData;
+    return buildEmptyDashboardData(scope);
+  }
 }
 
 export const loadDashboardData = getDashboardData;
+
+export async function loadDashboardPageData(input: {
+  userId: number;
+  workspaceId?: number | null;
+}): Promise<DashboardPageData> {
+  const scope: DashboardData["scope"] = input.workspaceId ? "workspace" : "user";
+
+  if (!input.workspaceId) {
+    return buildEmptyDashboardPageData(scope);
+  }
+
+  try {
+    const [dashboard, workspaceSummary, expenseCategoryCount] = await Promise.all([
+      getDashboardData(input),
+      runDashboardDataQuerySafely({
+        workspaceId: input.workspaceId,
+        label: "workspace summary query",
+        query: getUserWorkspaceSummary(input.userId, input.workspaceId),
+        fallback: () => null,
+      }),
+      runDashboardDataQuerySafely({
+        workspaceId: input.workspaceId,
+        label: "transaction category count query",
+        query: prisma.transactionCategory.count({
+          where: {
+            clientBusiness: {
+              workspaceId: input.workspaceId,
+              archivedAt: null,
+            },
+          },
+        }),
+        fallback: () => 0,
+      }),
+    ]);
+
+    return {
+      dashboard,
+      workspaceSummary: workspaceSummary
+        ? {
+            workspaceId: workspaceSummary.id,
+            workspaceName: workspaceSummary.name,
+            role: workspaceSummary.role,
+            clientBusinessCount: workspaceSummary.clientBusinessCount,
+            membersCount: workspaceSummary.membersCount,
+            taxRecordsCount: workspaceSummary.taxRecordsCount,
+            trackedTransactionCount: workspaceSummary.transactionCount,
+            representedCategoryCount: dashboard.expenseBreakdown.length,
+            expenseCategoryCount,
+            recentTransactionCount: dashboard.recentActivity.length,
+            lastTransactionAt: dashboard.recentActivity[0]?.date ?? null,
+            expenseCategorizationRate: dashboard.expenseCategorizationRate,
+          }
+        : null,
+      errorMessage: null,
+    };
+  } catch (error) {
+    logError("dashboard-data", "Failed to load dashboard page data", error, {
+      userId: input.userId,
+      workspaceId: input.workspaceId,
+    });
+
+    return {
+      ...buildEmptyDashboardPageData(scope),
+      errorMessage:
+        "Dashboard data is temporarily unavailable. We could not load live workspace metrics right now.",
+    };
+  }
+}

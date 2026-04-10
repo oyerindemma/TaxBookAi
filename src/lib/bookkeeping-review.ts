@@ -6,9 +6,63 @@ import {
   parseLineItems,
   parseReceiptScannerPayload,
 } from "@/lib/bookkeeping-receipts";
+import { logError, logWarn } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import {
+  hasPrismaDatabaseSupport,
+  isPrismaSchemaCompatibilityError,
+} from "@/lib/prisma-schema-compat";
 
 type PrismaExecutor = Prisma.TransactionClient | PrismaClient;
+
+const BOOKKEEPING_UPLOAD_FULL_QUERY_SUPPORT = {
+  tables: [
+    "BookkeepingUpload",
+    "BookkeepingDraft",
+    "ClientBusiness",
+    "User",
+    "WhatsAppReceiptMessage",
+    "WhatsAppReceiptConnection",
+  ],
+  columns: [
+    "BookkeepingUpload.workspaceId",
+    "BookkeepingUpload.ingestionChannel",
+    "BookkeepingUpload.createdAt",
+    "BookkeepingDraft.uploadId",
+    "ClientBusiness.name",
+    "User.fullName",
+    "User.email",
+    "WhatsAppReceiptMessage.bookkeepingUploadId",
+    "WhatsAppReceiptConnection.label",
+  ],
+} as const;
+
+const BOOKKEEPING_UPLOAD_FALLBACK_QUERY_SUPPORT = {
+  tables: ["BookkeepingUpload", "BookkeepingDraft", "ClientBusiness", "User"],
+  columns: [
+    "BookkeepingUpload.workspaceId",
+    "BookkeepingUpload.createdAt",
+    "BookkeepingDraft.uploadId",
+    "ClientBusiness.name",
+    "User.fullName",
+    "User.email",
+  ],
+} as const;
+
+const bookkeepingReviewWarningKeys = new Set<string>();
+
+function logBookkeepingReviewWarningOnce(
+  key: string,
+  message: string,
+  metadata: Record<string, unknown>
+) {
+  if (bookkeepingReviewWarningKeys.has(key)) {
+    return;
+  }
+
+  bookkeepingReviewWarningKeys.add(key);
+  logWarn("bookkeeping-review", message, metadata);
+}
 
 function buildDraftCounts(statuses: DraftReviewStatus[]) {
   return statuses.reduce(
@@ -25,16 +79,152 @@ function buildDraftCounts(statuses: DraftReviewStatus[]) {
   );
 }
 
-function serializeUpload(upload: Awaited<ReturnType<typeof fetchWorkspaceUploads>>[number]) {
+const bookkeepingDraftSelect = {
+  id: true,
+  description: true,
+  reference: true,
+  documentNumber: true,
+  vendorId: true,
+  vendorName: true,
+  categoryId: true,
+  suggestedCategoryName: true,
+  paymentMethod: true,
+  direction: true,
+  subtotalMinor: true,
+  amountMinor: true,
+  totalAmountMinor: true,
+  taxAmountMinor: true,
+  taxRate: true,
+  currency: true,
+  vatAmountMinor: true,
+  whtAmountMinor: true,
+  vatTreatment: true,
+  whtTreatment: true,
+  confidence: true,
+  deductibilityHint: true,
+  fieldConfidencePayload: true,
+  lineItemsPayload: true,
+  reviewStatus: true,
+  reviewerNote: true,
+  proposedDate: true,
+  reviewedAt: true,
+  approvedAt: true,
+  rejectedAt: true,
+  vendor: {
+    select: {
+      name: true,
+    },
+  },
+  category: {
+    select: {
+      name: true,
+    },
+  },
+  reviewedBy: {
+    select: {
+      fullName: true,
+    },
+  },
+  ledgerTransaction: {
+    select: {
+      id: true,
+    },
+  },
+} satisfies Prisma.BookkeepingDraftSelect;
+
+const bookkeepingUploadFallbackSelect = {
+  id: true,
+  fileName: true,
+  fileType: true,
+  sourceType: true,
+  documentType: true,
+  status: true,
+  uploadSizeBytes: true,
+  reviewNotes: true,
+  rawText: true,
+  failureReason: true,
+  duplicateConfidence: true,
+  duplicateReason: true,
+  extractedAt: true,
+  reviewedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  aiPayload: true,
+  duplicateOfUpload: {
+    select: {
+      id: true,
+      fileName: true,
+      createdAt: true,
+      status: true,
+      clientBusiness: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  },
+  clientBusiness: {
+    select: {
+      id: true,
+      name: true,
+      defaultCurrency: true,
+    },
+  },
+  uploadedBy: {
+    select: {
+      fullName: true,
+      email: true,
+    },
+  },
+  drafts: {
+    orderBy: [{ createdAt: "asc" }],
+    select: bookkeepingDraftSelect,
+  },
+} satisfies Prisma.BookkeepingUploadSelect;
+
+const bookkeepingUploadSelect = {
+  ...bookkeepingUploadFallbackSelect,
+  ingestionChannel: true,
+  whatsAppReceiptMessage: {
+    select: {
+      id: true,
+      provider: true,
+      senderPhoneNumber: true,
+      senderName: true,
+      receivedAt: true,
+      externalMessageId: true,
+      connection: {
+        select: {
+          label: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.BookkeepingUploadSelect;
+
+type BookkeepingUploadRecord =
+  | Prisma.BookkeepingUploadGetPayload<{
+      select: typeof bookkeepingUploadSelect;
+    }>
+  | Prisma.BookkeepingUploadGetPayload<{
+      select: typeof bookkeepingUploadFallbackSelect;
+    }>;
+
+function serializeUpload(upload: BookkeepingUploadRecord) {
   const payload = parseReceiptScannerPayload(upload.aiPayload);
   const draftStatuses = upload.drafts.map((draft) => draft.reviewStatus);
   const draftCounts = buildDraftCounts(draftStatuses);
+  const ingestionChannel =
+    "ingestionChannel" in upload ? upload.ingestionChannel : "DIRECT_UPLOAD";
+  const whatsAppReceiptMessage =
+    "whatsAppReceiptMessage" in upload ? upload.whatsAppReceiptMessage : null;
 
   return {
     id: upload.id,
     fileName: upload.fileName,
     fileType: upload.fileType,
     sourceType: upload.sourceType,
+    ingestionChannel,
     documentType: upload.documentType,
     status: upload.status,
     uploadSizeBytes: upload.uploadSizeBytes,
@@ -63,6 +253,17 @@ function serializeUpload(upload: Awaited<ReturnType<typeof fetchWorkspaceUploads
           createdAt: upload.duplicateOfUpload.createdAt.toISOString(),
           status: upload.duplicateOfUpload.status,
           clientBusinessName: upload.duplicateOfUpload.clientBusiness.name,
+        }
+      : null,
+    whatsAppReceiptMessage: whatsAppReceiptMessage
+      ? {
+          id: whatsAppReceiptMessage.id,
+          provider: whatsAppReceiptMessage.provider,
+          senderPhoneNumber: whatsAppReceiptMessage.senderPhoneNumber,
+          senderName: whatsAppReceiptMessage.senderName,
+          connectionLabel: whatsAppReceiptMessage.connection.label,
+          receivedAt: whatsAppReceiptMessage.receivedAt.toISOString(),
+          externalMessageId: whatsAppReceiptMessage.externalMessageId,
         }
       : null,
     clientBusiness: upload.clientBusiness,
@@ -110,113 +311,91 @@ function serializeUpload(upload: Awaited<ReturnType<typeof fetchWorkspaceUploads
 }
 
 async function fetchWorkspaceUploads(workspaceId: number) {
-  return prisma.bookkeepingUpload.findMany({
-    where: {
-      workspaceId,
-    },
-    select: {
-      id: true,
-      fileName: true,
-      fileType: true,
-      sourceType: true,
-      documentType: true,
-      status: true,
-      uploadSizeBytes: true,
-      reviewNotes: true,
-      rawText: true,
-      failureReason: true,
-      duplicateConfidence: true,
-      duplicateReason: true,
-      extractedAt: true,
-      reviewedAt: true,
-      createdAt: true,
-      updatedAt: true,
-      aiPayload: true,
-      duplicateOfUpload: {
-        select: {
-          id: true,
-          fileName: true,
-          createdAt: true,
-          status: true,
-          clientBusiness: {
-            select: {
-              name: true,
-            },
-          },
-        },
+  const supportsFullQuery = await hasPrismaDatabaseSupport(
+    BOOKKEEPING_UPLOAD_FULL_QUERY_SUPPORT
+  );
+  const supportsFallbackQuery = supportsFullQuery
+    ? true
+    : await hasPrismaDatabaseSupport(BOOKKEEPING_UPLOAD_FALLBACK_QUERY_SUPPORT);
+
+  if (!supportsFullQuery && !supportsFallbackQuery) {
+    logBookkeepingReviewWarningOnce(
+      "missing-upload-query-support",
+      "Bookkeeping review uploads are unavailable in the current database; returning an empty list.",
+      {
+        workspaceId,
+      }
+    );
+    return [] satisfies BookkeepingUploadRecord[];
+  }
+
+  if (!supportsFullQuery) {
+    logBookkeepingReviewWarningOnce(
+      "fallback-upload-query",
+      "Bookkeeping review uploads are using a legacy-safe query because optional upload columns or WhatsApp relations are unavailable.",
+      {
+        workspaceId,
+      }
+    );
+  }
+
+  try {
+    return await prisma.bookkeepingUpload.findMany({
+      where: {
+        workspaceId,
       },
-      clientBusiness: {
-        select: {
-          id: true,
-          name: true,
-          defaultCurrency: true,
-        },
-      },
-      uploadedBy: {
-        select: {
-          fullName: true,
-          email: true,
-        },
-      },
-      drafts: {
-        orderBy: [{ createdAt: "asc" }],
-        select: {
-          id: true,
-          description: true,
-          reference: true,
-          documentNumber: true,
-          vendorId: true,
-          vendorName: true,
-          categoryId: true,
-          suggestedCategoryName: true,
-          paymentMethod: true,
-          direction: true,
-          subtotalMinor: true,
-          amountMinor: true,
-          totalAmountMinor: true,
-          taxAmountMinor: true,
-          taxRate: true,
-          currency: true,
-          vatAmountMinor: true,
-          whtAmountMinor: true,
-          vatTreatment: true,
-          whtTreatment: true,
-          confidence: true,
-          deductibilityHint: true,
-          fieldConfidencePayload: true,
-          lineItemsPayload: true,
-          reviewStatus: true,
-          reviewerNote: true,
-          proposedDate: true,
-          reviewedAt: true,
-          approvedAt: true,
-          rejectedAt: true,
-          vendor: {
-            select: {
-              name: true,
-            },
+      select: supportsFullQuery ? bookkeepingUploadSelect : bookkeepingUploadFallbackSelect,
+      orderBy: [{ createdAt: "desc" }],
+      take: 25,
+    });
+  } catch (error) {
+    if (
+      supportsFullQuery &&
+      isPrismaSchemaCompatibilityError(error, {
+        tables: [...BOOKKEEPING_UPLOAD_FULL_QUERY_SUPPORT.tables],
+        columns: [...BOOKKEEPING_UPLOAD_FULL_QUERY_SUPPORT.columns],
+      })
+    ) {
+      logBookkeepingReviewWarningOnce(
+        "runtime-upload-query-fallback",
+        "Bookkeeping review uploads hit a schema mismatch at runtime; retrying with a legacy-safe query.",
+        {
+          workspaceId,
+        }
+      );
+
+      try {
+        return await prisma.bookkeepingUpload.findMany({
+          where: {
+            workspaceId,
           },
-          category: {
-            select: {
-              name: true,
-            },
-          },
-          reviewedBy: {
-            select: {
-              fullName: true,
-            },
-          },
-          ledgerTransaction: {
-            select: {
-              id: true,
-            },
-          },
-        },
-      },
-    },
-    orderBy: [{ createdAt: "desc" }],
-    take: 25,
-  });
+          select: bookkeepingUploadFallbackSelect,
+          orderBy: [{ createdAt: "desc" }],
+          take: 25,
+        });
+      } catch (fallbackError) {
+        logError(
+          "bookkeeping-review",
+          "Bookkeeping review uploads fallback query failed; returning an empty list.",
+          fallbackError,
+          {
+            workspaceId,
+          }
+        );
+        return [] satisfies BookkeepingUploadRecord[];
+      }
+    }
+
+    logError(
+      "bookkeeping-review",
+      "Bookkeeping review uploads query failed; returning an empty list.",
+      error,
+      {
+        workspaceId,
+      }
+    );
+    return [] satisfies BookkeepingUploadRecord[];
+  }
 }
 
 export async function listWorkspaceBookkeepingReviewUploads(workspaceId: number) {
@@ -228,114 +407,98 @@ export async function getWorkspaceBookkeepingReviewUpload(
   workspaceId: number,
   uploadId: number
 ) {
-  const upload = await prisma.bookkeepingUpload.findFirst({
-    where: {
-      id: uploadId,
-      workspaceId,
-    },
-    select: {
-      id: true,
-      fileName: true,
-      fileType: true,
-      sourceType: true,
-      documentType: true,
-      status: true,
-      uploadSizeBytes: true,
-      reviewNotes: true,
-      rawText: true,
-      failureReason: true,
-      duplicateConfidence: true,
-      duplicateReason: true,
-      extractedAt: true,
-      reviewedAt: true,
-      createdAt: true,
-      updatedAt: true,
-      aiPayload: true,
-      duplicateOfUpload: {
-        select: {
-          id: true,
-          fileName: true,
-          createdAt: true,
-          status: true,
-          clientBusiness: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      },
-      clientBusiness: {
-        select: {
-          id: true,
-          name: true,
-          defaultCurrency: true,
-        },
-      },
-      uploadedBy: {
-        select: {
-          fullName: true,
-          email: true,
-        },
-      },
-      drafts: {
-        orderBy: [{ createdAt: "asc" }],
-        select: {
-          id: true,
-          description: true,
-          reference: true,
-          documentNumber: true,
-          vendorId: true,
-          vendorName: true,
-          categoryId: true,
-          suggestedCategoryName: true,
-          paymentMethod: true,
-          direction: true,
-          subtotalMinor: true,
-          amountMinor: true,
-          totalAmountMinor: true,
-          taxAmountMinor: true,
-          taxRate: true,
-          currency: true,
-          vatAmountMinor: true,
-          whtAmountMinor: true,
-          vatTreatment: true,
-          whtTreatment: true,
-          confidence: true,
-          deductibilityHint: true,
-          fieldConfidencePayload: true,
-          lineItemsPayload: true,
-          reviewStatus: true,
-          reviewerNote: true,
-          proposedDate: true,
-          reviewedAt: true,
-          approvedAt: true,
-          rejectedAt: true,
-          vendor: {
-            select: {
-              name: true,
-            },
-          },
-          category: {
-            select: {
-              name: true,
-            },
-          },
-          reviewedBy: {
-            select: {
-              fullName: true,
-            },
-          },
-          ledgerTransaction: {
-            select: {
-              id: true,
-            },
-          },
-        },
-      },
-    },
-  });
+  const supportsFullQuery = await hasPrismaDatabaseSupport(
+    BOOKKEEPING_UPLOAD_FULL_QUERY_SUPPORT
+  );
+  const supportsFallbackQuery = supportsFullQuery
+    ? true
+    : await hasPrismaDatabaseSupport(BOOKKEEPING_UPLOAD_FALLBACK_QUERY_SUPPORT);
 
-  return upload ? serializeUpload(upload) : null;
+  if (!supportsFullQuery && !supportsFallbackQuery) {
+    logBookkeepingReviewWarningOnce(
+      "missing-single-upload-query-support",
+      "Bookkeeping review upload details are unavailable in the current database; returning an empty state.",
+      {
+        workspaceId,
+        uploadId,
+      }
+    );
+    return null;
+  }
+
+  if (!supportsFullQuery) {
+    logBookkeepingReviewWarningOnce(
+      "fallback-single-upload-query",
+      "Bookkeeping review upload details are using a legacy-safe query because optional upload columns or WhatsApp relations are unavailable.",
+      {
+        workspaceId,
+        uploadId,
+      }
+    );
+  }
+
+  try {
+    const upload = await prisma.bookkeepingUpload.findFirst({
+      where: {
+        id: uploadId,
+        workspaceId,
+      },
+      select: supportsFullQuery ? bookkeepingUploadSelect : bookkeepingUploadFallbackSelect,
+    });
+
+    return upload ? serializeUpload(upload) : null;
+  } catch (error) {
+    if (
+      supportsFullQuery &&
+      isPrismaSchemaCompatibilityError(error, {
+        tables: [...BOOKKEEPING_UPLOAD_FULL_QUERY_SUPPORT.tables],
+        columns: [...BOOKKEEPING_UPLOAD_FULL_QUERY_SUPPORT.columns],
+      })
+    ) {
+      logBookkeepingReviewWarningOnce(
+        "runtime-single-upload-query-fallback",
+        "Bookkeeping review upload details hit a schema mismatch at runtime; retrying with a legacy-safe query.",
+        {
+          workspaceId,
+          uploadId,
+        }
+      );
+
+      try {
+        const fallbackUpload = await prisma.bookkeepingUpload.findFirst({
+          where: {
+            id: uploadId,
+            workspaceId,
+          },
+          select: bookkeepingUploadFallbackSelect,
+        });
+
+        return fallbackUpload ? serializeUpload(fallbackUpload) : null;
+      } catch (fallbackError) {
+        logError(
+          "bookkeeping-review",
+          "Bookkeeping review upload fallback query failed; returning an empty state.",
+          fallbackError,
+          {
+            workspaceId,
+            uploadId,
+          }
+        );
+        return null;
+      }
+    }
+
+    logError(
+      "bookkeeping-review",
+      "Bookkeeping review upload query failed; returning an empty state.",
+      error,
+      {
+        workspaceId,
+        uploadId,
+      }
+    );
+    return null;
+  }
 }
 
 export async function listWorkspaceClientBusinessReviewOptions(workspaceId: number) {

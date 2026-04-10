@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { COMPANY_DETAILS } from "@/components/marketing/site-content";
+import { phoneHref, phoneNumber, supportEmail, supportEmailHref } from "@/lib/config/contact";
 
 const TOPIC_OPTIONS = [
   "Book a product demo",
@@ -48,7 +48,7 @@ export function ContactInquiryForm() {
       ].join("\n")
     );
 
-    return `mailto:${COMPANY_DETAILS.email}?subject=${subject}&body=${body}`;
+    return `mailto:${supportEmail}?subject=${subject}&body=${body}`;
   }, [company, email, fullName, message, topic]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -170,14 +170,21 @@ export function ContactInquiryForm() {
               variant="outline"
               className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
             >
-              <a href={`mailto:${COMPANY_DETAILS.email}`}>Email directly</a>
+              <a href={supportEmailHref}>Email directly</a>
             </Button>
           </div>
         </form>
 
         <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-4 text-sm text-white/60">
-          Prefer direct contact? Email <span className="font-medium text-white">{COMPANY_DETAILS.email}</span>{" "}
-          or call <span className="font-medium text-white">{COMPANY_DETAILS.phone}</span>.
+          Prefer direct contact? Email{" "}
+          <a href={supportEmailHref} className="font-medium text-white transition hover:text-cyan">
+            {supportEmail}
+          </a>{" "}
+          or call{" "}
+          <a href={phoneHref} className="font-medium text-white transition hover:text-cyan">
+            {phoneNumber}
+          </a>
+          .
         </div>
       </CardContent>
     </Card>

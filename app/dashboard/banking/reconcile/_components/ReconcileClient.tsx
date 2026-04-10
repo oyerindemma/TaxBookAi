@@ -202,6 +202,54 @@ type PreviewResponse = {
   };
 };
 
+type ImportSummaryResponse = {
+  totalRows: number;
+  importedRows: number;
+  duplicateRows: number;
+  invalidRows: number;
+  status: "completed" | "completed_with_warnings" | "empty";
+};
+
+type ImportCategorizationResponse = {
+  status: "applied" | "skipped" | "error";
+  processedRows: number;
+  suggestedRows: number;
+  uncategorizedRows: number;
+  provider: string;
+  warning: string | null;
+};
+
+type ImportPipelineResponse = {
+  rowsReceived: number;
+  rowsImported: number;
+  rowsSkippedAsDuplicates: number;
+  rowsInvalid: number;
+  rowsQueuedForReview: number;
+  rowsCategorized: number;
+  rowsFlaggedForTaxReview: number;
+  warnings: string[];
+  errors: ImportDiagnostics["errors"];
+  categorizationMode: "real_provider" | "fallback_heuristic" | "hybrid_mode";
+  taxMode: "suggested_defaults" | "safe_defaults";
+};
+
+type ImportResponse = {
+  ok?: boolean;
+  error?: string;
+  importId?: number | null;
+  summary?: ImportSummaryResponse;
+  categorization?: ImportCategorizationResponse;
+  pipeline?: ImportPipelineResponse;
+  guidance?: string[];
+  errors?: ImportDiagnostics["errors"];
+  createdTransactionIds?: number[];
+  links?: {
+    reviewQueueHref: string;
+    transactionEngineHref: string;
+    taxCenterHref: string;
+  };
+};
+
 type AccountForm = {
   accountName: string;
   bankName: string;
@@ -490,6 +538,42 @@ function badgeVariant(status: BankTransactionStatus) {
 
 function statusLabel(status: string) {
   return status.replace(/_/g, " ");
+}
+
+function getImportSummaryTone(summary: ImportSummaryResponse) {
+  if (summary.status === "completed") {
+    return {
+      container: "border-emerald-200 bg-emerald-50/70",
+      badge: "border border-emerald-200 bg-white text-emerald-900",
+    };
+  }
+
+  return {
+    container: "border-amber-200 bg-amber-50/70",
+    badge: "border border-amber-200 bg-white text-amber-900",
+  };
+}
+
+function getImportSummaryHeadline(summary: ImportSummaryResponse) {
+  if (summary.importedRows > 0) {
+    return `${summary.importedRows} rows are now in the transaction engine and review queue for this workspace.`;
+  }
+
+  if (summary.duplicateRows > 0 && summary.invalidRows === 0) {
+    return "No new rows were imported because every parsed row already exists for this workspace and bank account.";
+  }
+
+  return "No new rows were imported.";
+}
+
+function getImportCategorizationModeLabel(mode: ImportPipelineResponse["categorizationMode"]) {
+  if (mode === "hybrid_mode") return "Hybrid mode";
+  if (mode === "real_provider") return "Real provider";
+  return "Fallback heuristic";
+}
+
+function getImportTaxModeLabel(mode: ImportPipelineResponse["taxMode"]) {
+  return mode === "suggested_defaults" ? "Suggested defaults applied" : "Safe defaults applied";
 }
 
 function getTransactionStateMeta(transaction: Transaction, bestSuggestion: MatchSuggestion | null) {
@@ -796,6 +880,7 @@ export default function ReconcileClient({
   const [previewing, setPreviewing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importDiagnostics, setImportDiagnostics] = useState<ImportDiagnostics | null>(null);
+  const [importResult, setImportResult] = useState<ImportResponse | null>(null);
   const [forms, setForms] = useState<Record<number, TransactionForm>>({});
   const [splittingTransactionId, setSplittingTransactionId] = useState<number | null>(null);
   const [workingTransactionId, setWorkingTransactionId] = useState<number | null>(null);
@@ -913,6 +998,7 @@ export default function ReconcileClient({
     setError(null);
     setMessage(null);
     setImportDiagnostics(null);
+    setImportResult(null);
 
     try {
       const formData = new FormData();
@@ -953,6 +1039,7 @@ export default function ReconcileClient({
     setError(null);
     setMessage(null);
     setImportDiagnostics(null);
+    setImportResult(null);
 
     try {
       const formData = new FormData();
@@ -966,14 +1053,7 @@ export default function ReconcileClient({
         method: "POST",
         body: formData,
       });
-      const data = (await response.json()) as {
-        error?: string;
-        inserted?: number;
-        duplicateCount?: number;
-        failedCount?: number;
-        guidance?: string[];
-        errors?: ImportDiagnostics["errors"];
-      };
+      const data = (await response.json()) as ImportResponse;
 
       if (!response.ok) {
         setImportDiagnostics({
@@ -987,8 +1067,12 @@ export default function ReconcileClient({
       setPreview(null);
       setSelectedFile(null);
       setMapping({});
+      setImportResult(data);
       setImportDiagnostics(
-        (data.guidance?.length ?? 0) > 0 || (data.errors?.length ?? 0) > 0 || (data.failedCount ?? 0) > 0
+        (data.guidance?.length ?? 0) > 0 ||
+          (data.errors?.length ?? 0) > 0 ||
+          (data.summary?.invalidRows ?? 0) > 0 ||
+          (data.summary?.duplicateRows ?? 0) > 0
           ? {
               kind: "warning",
               guidance: data.guidance ?? [],
@@ -996,11 +1080,25 @@ export default function ReconcileClient({
             }
           : null
       );
-      setMessage(
-        `Imported ${data.inserted ?? 0} transactions. Duplicates skipped: ${
-          data.duplicateCount ?? 0
-        }. Failed rows: ${data.failedCount ?? 0}.`
-      );
+      if (data.summary) {
+        setMessage(
+          data.summary.importedRows > 0
+            ? `Imported ${data.summary.importedRows} of ${data.summary.totalRows} CSV rows. ${
+                data.pipeline?.rowsQueuedForReview ?? data.summary.importedRows
+              } ${
+                (data.pipeline?.rowsQueuedForReview ?? data.summary.importedRows) === 1
+                  ? "row is"
+                  : "rows are"
+              } now in Review Queue.`
+            : data.summary.duplicateRows > 0 && data.summary.invalidRows === 0
+              ? `No new rows were imported. ${data.summary.duplicateRows} duplicate row${
+                  data.summary.duplicateRows === 1 ? " was" : "s were"
+                } already present for this bank account.`
+              : `Imported ${data.summary.importedRows} of ${data.summary.totalRows} CSV rows.`
+        );
+      } else {
+        setMessage("CSV import completed.");
+      }
       await loadDashboard();
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : "Network error");
@@ -1444,7 +1542,13 @@ export default function ReconcileClient({
                   id="csvFile"
                   type="file"
                   accept=".csv,text/csv"
-                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                  onChange={(event) => {
+                    setSelectedFile(event.target.files?.[0] ?? null);
+                    setPreview(null);
+                    setMapping({});
+                    setImportDiagnostics(null);
+                    setImportResult(null);
+                  }}
                   disabled={!editable}
                 />
                 {selectedFile ? (
@@ -1711,6 +1815,138 @@ export default function ReconcileClient({
                     ) : null}
                   </div>
                 ) : null}
+              </div>
+            ) : null}
+
+            {importResult?.summary ? (
+              <div
+                className={cn(
+                  "rounded-lg border p-4",
+                  getImportSummaryTone(importResult.summary).container
+                )}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-foreground">Import complete</div>
+                    <div className="text-sm text-muted-foreground">
+                      {getImportSummaryHeadline(importResult.summary)}
+                    </div>
+                  </div>
+                  <Badge
+                    variant="secondary"
+                    className={getImportSummaryTone(importResult.summary).badge}
+                  >
+                    {importResult.summary.status === "completed_with_warnings"
+                      ? "Completed with warnings"
+                      : importResult.summary.status === "completed"
+                        ? "Completed"
+                        : "Empty import"}
+                  </Badge>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-4">
+                  <div className="rounded-md border border-emerald-200 bg-white px-3 py-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Total rows
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-foreground">
+                      {importResult.summary.totalRows}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-emerald-200 bg-white px-3 py-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Imported
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-foreground">
+                      {importResult.summary.importedRows}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-emerald-200 bg-white px-3 py-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Duplicates skipped
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-foreground">
+                      {importResult.summary.duplicateRows}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-emerald-200 bg-white px-3 py-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Invalid rows
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-foreground">
+                      {importResult.summary.invalidRows}
+                    </div>
+                  </div>
+                </div>
+
+                {importResult.pipeline ? (
+                  <div className="mt-4 rounded-md border border-emerald-200 bg-white px-3 py-3 text-sm">
+                    <div className="font-medium text-foreground">Review queue handoff</div>
+                    <div className="mt-1 text-muted-foreground">
+                      {importResult.pipeline.rowsQueuedForReview} imported row
+                      {importResult.pipeline.rowsQueuedForReview === 1 ? "" : "s"} were queued for
+                      Transaction Review with pending review status. Invalid rows stayed out of
+                      the queue and duplicates were skipped.
+                    </div>
+                  </div>
+                ) : null}
+
+                {importResult.categorization ? (
+                  <div className="mt-4 rounded-md border border-emerald-200 bg-white px-3 py-3 text-sm">
+                    <div className="font-medium text-foreground">AI categorization handoff</div>
+                    <div className="mt-1 text-muted-foreground">
+                      {importResult.pipeline?.rowsCategorized ??
+                        importResult.categorization.suggestedRows} imported rows received category
+                      suggestions and {importResult.categorization.uncategorizedRows} still need
+                      manual categorization. Provider: {importResult.categorization.provider}
+                      {importResult.pipeline
+                        ? ` · ${getImportCategorizationModeLabel(
+                            importResult.pipeline.categorizationMode
+                          )}.`
+                        : "."}
+                    </div>
+                    {importResult.categorization.warning ? (
+                      <div className="mt-2 text-amber-900">
+                        {importResult.categorization.warning}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="mt-4 rounded-md border border-emerald-200 bg-white px-3 py-3 text-sm">
+                  <div className="font-medium text-foreground">Tax engine handoff</div>
+                  <div className="mt-1 text-muted-foreground">
+                    {importResult.pipeline
+                      ? `${importResult.pipeline.rowsFlaggedForTaxReview} imported row${
+                          importResult.pipeline.rowsFlaggedForTaxReview === 1 ? "" : "s"
+                        } carried VAT or WHT signals into Tax Center. ${
+                          getImportTaxModeLabel(importResult.pipeline.taxMode)
+                        }. Rows without strong tax signals stayed on safe defaults and can be resolved during review.`
+                      : "Imported rows are available in the tax center immediately with safe VAT and WHT defaults. Posted-only dashboard tax cards update after review and posting."}
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button asChild>
+                    <Link href={importResult.links?.reviewQueueHref ?? "/dashboard/banking/review"}>
+                      Review imported transactions
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link
+                      href={
+                        importResult.links?.transactionEngineHref ?? "/dashboard/banking"
+                      }
+                    >
+                      View transaction engine
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href={importResult.links?.taxCenterHref ?? "/dashboard/tax-center"}>
+                      Open tax center
+                    </Link>
+                  </Button>
+                </div>
               </div>
             ) : null}
           </CardContent>

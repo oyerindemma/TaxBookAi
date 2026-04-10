@@ -1,11 +1,10 @@
-import { PrismaClient } from "@prisma/client";
-import { loadDotEnv } from "./prisma-build-env.mjs";
+import prismaScriptClient from "./create-prisma-client.cjs";
 
-loadDotEnv();
+const { createScriptPrismaClient } = prismaScriptClient;
 
 async function main() {
   const startedAt = Date.now();
-  const prisma = new PrismaClient({
+  const { prisma, disconnect } = createScriptPrismaClient({
     log: ["error"],
   });
 
@@ -38,7 +37,7 @@ async function main() {
     );
     process.exitCode = 1;
   } finally {
-    await prisma.$disconnect();
+    await disconnect();
   }
 }
 

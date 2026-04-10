@@ -12,6 +12,7 @@ import {
 } from "@/lib/integrity-alerts";
 import { logRouteError } from "@/lib/logger";
 import { logPaymentLifecycleEvent } from "@/lib/payment-lifecycle-logs";
+import { recordPaystackWebhookActivity } from "@/lib/payment-tax-integration";
 import { verifyPaystackSignature } from "@/lib/paystack";
 
 export const runtime = "nodejs";
@@ -313,6 +314,22 @@ async function handlePaystackWebhook(rawBody: string, signature: string) {
     ledgerEntryId: confirmed.ledgerEntryId,
     taxRecordId: confirmed.taxRecordId,
   });
+
+  try {
+    await recordPaystackWebhookActivity({
+      rawBody,
+      preferredWorkspaceId: confirmed.invoice.workspaceId,
+      preferredInvoiceId: confirmed.invoice.id,
+      preferredPaymentId: confirmed.paymentId,
+      autoConfirmInvoicePayment: false,
+    });
+  } catch (error) {
+    logRouteError("payments webhook activity import failed", error, {
+      reference,
+      workspaceId: confirmed.invoice.workspaceId,
+      invoiceId: confirmed.invoice.id,
+    });
+  }
 
   return NextResponse.json({
     ...payload,

@@ -43,13 +43,13 @@ type AudienceBlock = {
 export const MARKETING_NAME = "TaxBook AI";
 
 export const MARKETING_HEADLINE =
-  "AI accounting software for Nigerian businesses and accounting firms";
+  "Nigeria-first AI finance operations platform";
 
 export const MARKETING_SUBHEADLINE =
-  "TaxBook AI helps businesses, finance teams, and accounting firms move from receipt capture to bookkeeping review, bank reconciliation, VAT and WHT summaries, and filing-ready tax workflows in one audit-friendly workspace.";
+  "TaxBook AI helps Nigerian businesses, finance teams, and accounting firms move from imported transactions into AI bookkeeping review, reconciliation, VAT and WHT visibility, filing readiness, and accountant workspaces from one audit-friendly operating layer.";
 
 export const MARKETING_TAGLINE =
-  "Nigeria-first AI bookkeeping, reconciliation, and filing workflows";
+  "AI bookkeeping, tax, readiness, and accountant workflows for Nigeria";
 
 export const MARKETING_NAV_ITEMS = [
   { href: "/", label: "Home" },

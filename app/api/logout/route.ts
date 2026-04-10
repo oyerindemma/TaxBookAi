@@ -1,15 +1,10 @@
-import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { deleteSessionByToken, SESSION_COOKIE_NAME } from "@/lib/auth";
 import {
-  buildSessionCookieOptions,
-  deleteSessionByToken,
-  SESSION_COOKIE_NAME,
-} from "@/lib/auth";
-import {
-  buildWorkspaceCookieOptions,
-  WORKSPACE_COOKIE_NAME,
-} from "@/lib/workspaces";
-import { logRouteError } from "@/lib/logger";
+  clearAuthCookies,
+  createAuthJsonResponse,
+  createAuthServerErrorResponse,
+} from "@/lib/auth-api";
 
 export const runtime = "nodejs";
 
@@ -21,27 +16,12 @@ export async function POST() {
       await deleteSessionByToken(token);
     }
 
-    const response = NextResponse.json({ ok: true });
-    response.cookies.set({
-      name: SESSION_COOKIE_NAME,
-      value: "",
-      ...buildSessionCookieOptions(),
-      maxAge: 0,
-      expires: new Date(0),
-    });
-    response.cookies.set({
-      name: WORKSPACE_COOKIE_NAME,
-      value: "",
-      ...buildWorkspaceCookieOptions(),
-      maxAge: 0,
-      expires: new Date(0),
-    });
+    const response = createAuthJsonResponse({ ok: true });
+    clearAuthCookies(response);
     return response;
   } catch (error) {
-    logRouteError("logout failed", error);
-    return NextResponse.json(
-      { error: "Server error logging out" },
-      { status: 500 }
-    );
+    return createAuthServerErrorResponse("/api/logout", error, {
+      message: "We could not log you out right now. Please try again.",
+    });
   }
 }

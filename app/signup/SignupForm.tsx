@@ -14,53 +14,14 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  getSafeNextPath,
+  parseAuthActionResponse,
+} from "@/lib/auth-client";
 
 type FieldErrors = Partial<
-  Record<"fullName" | "email" | "password" | "confirmPassword", string>
+  Record<"fullName" | "email" | "password" | "confirmPassword" | "acceptedTerms", string>
 >;
-type SignupResponse = {
-  error?: string;
-  details?: string;
-  fieldErrors?: FieldErrors;
-};
-
-async function parseSignupResponse(res: Response) {
-  const contentType = res.headers.get("content-type") ?? "";
-
-  if (contentType.toLowerCase().includes("application/json")) {
-    try {
-      return {
-        data: (await res.json()) as SignupResponse,
-        fallbackText: null,
-      };
-    } catch {
-      return {
-        data: null,
-        fallbackText: null,
-      };
-    }
-  }
-
-  try {
-    const text = (await res.text()).trim();
-    return {
-      data: null,
-      fallbackText: text || null,
-    };
-  } catch {
-    return {
-      data: null,
-      fallbackText: null,
-    };
-  }
-}
-
-function getSafeNextPath(raw: string | null) {
-  if (!raw) return null;
-  if (!raw.startsWith("/")) return null;
-  if (raw.startsWith("//")) return null;
-  return raw;
-}
 
 export default function SignupForm() {
   const router = useRouter();
@@ -69,6 +30,7 @@ export default function SignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [loading, setLoading] = useState(false);
@@ -86,10 +48,17 @@ export default function SignupForm() {
       const res = await fetch("/api/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, email, password, confirmPassword }),
+        body: JSON.stringify({
+          fullName,
+          email,
+          password,
+          confirmPassword,
+          acceptedTerms,
+        }),
       });
 
-      const { data, fallbackText } = await parseSignupResponse(res);
+      const { data, fallbackText } =
+        await parseAuthActionResponse<keyof FieldErrors>(res);
 
       if (!res.ok) {
         setMessage(
@@ -217,6 +186,47 @@ export default function SignupForm() {
                 />
                 {fieldErrors.confirmPassword ? (
                   <p className="text-sm text-rose-300">{fieldErrors.confirmPassword}</p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-2">
+                <label
+                  htmlFor="acceptedTerms"
+                  className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75"
+                >
+                  <input
+                    id="acceptedTerms"
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(event) => setAcceptedTerms(event.target.checked)}
+                    aria-invalid={fieldErrors.acceptedTerms ? "true" : "false"}
+                    className="mt-1 size-4 rounded border-white/20 bg-transparent text-cyan focus:ring-cyan"
+                  />
+                  <span className="leading-6">
+                    I agree to the{" "}
+                    <Link href="/terms" className="font-medium text-white underline underline-offset-4">
+                      Terms of Use
+                    </Link>
+                    ,{" "}
+                    <Link href="/privacy" className="font-medium text-white underline underline-offset-4">
+                      Privacy Policy
+                    </Link>
+                    , and{" "}
+                    <Link href="/cookies" className="font-medium text-white underline underline-offset-4">
+                      Cookie Policy
+                    </Link>
+                    .
+                  </span>
+                </label>
+                <p className="text-xs text-white/45">
+                  Enterprise customers can also review our{" "}
+                  <Link href="/dpa" className="font-medium text-white underline underline-offset-4">
+                    Data Processing Addendum
+                  </Link>
+                  .
+                </p>
+                {fieldErrors.acceptedTerms ? (
+                  <p className="text-sm text-rose-300">{fieldErrors.acceptedTerms}</p>
                 ) : null}
               </div>
 

@@ -2,20 +2,42 @@ import { Badge } from "@/components/ui/badge";
 import { FeatureGateCard } from "@/components/billing/feature-gate-card";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
+import { buildAssistantHomeState } from "@/lib/assistant-context";
 import { getWorkspaceFeatureAccess } from "@/lib/billing";
-import { buildFinanceAssistantHomeState } from "@/lib/finance-assistant";
 import { getActiveWorkspaceMembership } from "@/lib/workspaces";
 import AssistantClient from "./_components/AssistantClient";
 
-export default async function AssistantPage() {
+type AssistantPageProps = {
+  searchParams: Promise<{
+    prompt?: string | string[];
+  }>;
+};
+
+function readPrompt(
+  value: string | string[] | undefined
+) {
+  if (typeof value === "string") {
+    return value.trim().slice(0, 600);
+  }
+
+  if (Array.isArray(value)) {
+    return (value[0] ?? "").trim().slice(0, 600);
+  }
+
+  return "";
+}
+
+export default async function AssistantPage({ searchParams }: AssistantPageProps) {
   const user = await requireUser();
   const membership = await getActiveWorkspaceMembership(user.id);
+  const resolvedSearchParams = await searchParams;
+  const initialQuestion = readPrompt(resolvedSearchParams.prompt);
 
   if (!membership) {
     return (
       <section className="space-y-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">AI finance assistant</h1>
+          <h1 className="text-2xl font-semibold">Assistant</h1>
           <p className="text-muted-foreground">No workspace assigned.</p>
         </div>
         <Card>
@@ -35,9 +57,9 @@ export default async function AssistantPage() {
     return (
       <section className="space-y-6">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">AI finance assistant</h1>
+          <h1 className="text-2xl font-semibold">Assistant</h1>
           <p className="text-muted-foreground">
-            Growth unlocks AI receipt scanning, bookkeeping automation, and assistant workflows.
+            Growth unlocks grounded workspace Q&amp;A, bookkeeping automation, and assistant workflows.
           </p>
         </div>
         <FeatureGateCard
@@ -49,18 +71,15 @@ export default async function AssistantPage() {
     );
   }
 
-  const homeState = await buildFinanceAssistantHomeState({
-    workspaceId: membership.workspaceId,
-    role: membership.role,
-  });
+  const homeState = await buildAssistantHomeState(membership.workspaceId);
 
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">AI finance assistant</h1>
+          <h1 className="text-2xl font-semibold">Assistant</h1>
           <p className="text-muted-foreground">
-            Ask grounded questions about VAT, receivables, filings, anomalies, and reconciliation.
+            Ask grounded questions about transactions, review queue, category suggestions, tax exposure, and workspace blockers.
           </p>
           <p className="text-sm text-muted-foreground">
             Workspace:{" "}
@@ -78,10 +97,12 @@ export default async function AssistantPage() {
       </div>
 
       <AssistantClient
+        workspaceId={membership.workspaceId}
         workspaceName={membership.workspace.name}
         aiEnabled={homeState.aiEnabled}
         quickInsights={homeState.quickInsights}
         suggestedPrompts={homeState.suggestedPrompts}
+        initialQuestion={initialQuestion}
       />
     </section>
   );

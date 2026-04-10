@@ -11,6 +11,23 @@ type PaystackSuccessResponse<T> = {
   data: T;
 };
 
+type PaystackListMeta = {
+  total?: number;
+  skipped?: number;
+  perPage?: number;
+  page?: number;
+  pageCount?: number;
+  next?: string | null;
+  previous?: string | null;
+};
+
+type PaystackListResponse<T> = {
+  status: true;
+  message: string;
+  data: T[];
+  meta?: PaystackListMeta;
+};
+
 type PaystackErrorResponse = {
   status: false;
   message: string;
@@ -55,6 +72,39 @@ export type PaystackTransactionVerificationData = {
   metadata?: unknown;
 };
 
+export type PaystackTransactionListItem = {
+  id?: string | number;
+  status?: string | null;
+  reference?: string | null;
+  amount?: number | null;
+  fees?: number | null;
+  currency?: string | null;
+  paid_at?: string | null;
+  created_at?: string | null;
+  gateway_response?: string | null;
+  channel?: string | null;
+  customer?: Record<string, unknown> | PaystackCustomer | null;
+  metadata?: unknown;
+  authorization?: Record<string, unknown> | null;
+  settlement?: unknown;
+};
+
+export type PaystackSettlementListItem = {
+  id?: string | number;
+  status?: string | null;
+  currency?: string | null;
+  settlement_date?: string | null;
+  created_at?: string | null;
+  total_processed?: number | null;
+  total_fees?: number | null;
+  total_processed_by_payment_processor?: number | null;
+  total_transferred?: number | null;
+  transactions_count?: number | null;
+  transfer_code?: string | null;
+  metadata?: unknown;
+  destination?: Record<string, unknown> | null;
+};
+
 export type PaystackSubscriptionManagementEmailData = {
   sent?: boolean;
 };
@@ -93,6 +143,70 @@ async function paystackRequest<T>(
   return payload.data;
 }
 
+async function paystackListRequest<T>(
+  path: string,
+  init: RequestInit = {}
+): Promise<{ data: T[]; meta: PaystackListMeta | null }> {
+  const { secretKey } = getPaystackServerConfig();
+
+  const response = await fetch(`${PAYSTACK_API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${secretKey}`,
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+
+  const payload = (await response.json()) as PaystackListResponse<T> | PaystackErrorResponse;
+
+  if (!response.ok || !payload.status) {
+    const message =
+      payload && typeof payload === "object" && "message" in payload && payload.message
+        ? payload.message
+        : "Paystack request failed";
+    throw new Error(message);
+  }
+
+  return {
+    data: Array.isArray(payload.data) ? payload.data : [],
+    meta:
+      "meta" in payload && payload.meta && typeof payload.meta === "object"
+        ? payload.meta
+        : null,
+  };
+}
+
+function buildListQuery(input: {
+  page?: number;
+  perPage?: number;
+  from?: string | null;
+  to?: string | null;
+}) {
+  const searchParams = new URLSearchParams();
+
+  if (typeof input.page === "number" && Number.isFinite(input.page) && input.page > 0) {
+    searchParams.set("page", String(Math.trunc(input.page)));
+  }
+  if (
+    typeof input.perPage === "number" &&
+    Number.isFinite(input.perPage) &&
+    input.perPage > 0
+  ) {
+    searchParams.set("perPage", String(Math.trunc(input.perPage)));
+  }
+  if (input.from) {
+    searchParams.set("from", input.from);
+  }
+  if (input.to) {
+    searchParams.set("to", input.to);
+  }
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
 export async function initializePaystackTransaction(input: {
   email: string;
   amount: number;
@@ -118,6 +232,40 @@ export async function initializePaystackTransaction(input: {
 export async function verifyPaystackTransaction(reference: string) {
   return paystackRequest<PaystackTransactionVerificationData>(
     `/transaction/verify/${encodeURIComponent(reference)}`,
+    {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
+
+export async function listPaystackTransactions(input: {
+  page?: number;
+  perPage?: number;
+  from?: string | null;
+  to?: string | null;
+}) {
+  return paystackListRequest<PaystackTransactionListItem>(
+    `/transaction${buildListQuery(input)}`,
+    {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
+
+export async function listPaystackSettlements(input: {
+  page?: number;
+  perPage?: number;
+  from?: string | null;
+  to?: string | null;
+}) {
+  return paystackListRequest<PaystackSettlementListItem>(
+    `/settlement${buildListQuery(input)}`,
     {
       method: "GET",
       headers: {

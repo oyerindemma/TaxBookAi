@@ -1,6 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+import prismaScriptClient from "./create-prisma-client.cjs";
 
-const prisma = new PrismaClient();
+const { createScriptPrismaClient } = prismaScriptClient;
+const { prisma, disconnect } = createScriptPrismaClient();
 
 const DEFAULT_EXPENSE_CATEGORIES = [
   "Office",
@@ -89,5 +90,5 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await disconnect();
   });

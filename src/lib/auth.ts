@@ -10,13 +10,27 @@ import {
   SESSION_TTL_DAYS,
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/session-constants";
+import {
+  PASSWORD_MIN_LENGTH,
+  normalizeEmail,
+  normalizeFullName,
+  validateEmail,
+  validateFullName,
+  validatePassword,
+} from "@/lib/auth-validation";
 import { getAppUrl, getOptionalSessionCookieDomain } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { WORKSPACE_COOKIE_NAME } from "@/lib/workspaces";
 
 export { SESSION_COOKIE_NAME, SESSION_TTL_DAYS, SESSION_MAX_AGE_SECONDS };
-
-export const PASSWORD_MIN_LENGTH = 8;
+export {
+  PASSWORD_MIN_LENGTH,
+  normalizeEmail,
+  normalizeFullName,
+  validateEmail,
+  validateFullName,
+  validatePassword,
+};
 export const PASSWORD_RESET_TOKEN_TTL_MINUTES = 60;
 
 const PASSWORD_HASH_ROUNDS = 12;
@@ -53,58 +67,6 @@ function hashToken(token: string) {
 
 function generateToken() {
   return crypto.randomBytes(32).toString("hex");
-}
-
-export function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-export function normalizeFullName(fullName: string) {
-  return fullName.trim().replace(/\s+/g, " ");
-}
-
-export function validateEmail(email: string) {
-  if (!email) {
-    return "Enter your email address.";
-  }
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return "Enter a valid email address.";
-  }
-
-  return null;
-}
-
-export function validateFullName(fullName: string) {
-  if (!fullName) {
-    return "Enter your full name.";
-  }
-
-  if (fullName.length < 2) {
-    return "Full name must be at least 2 characters.";
-  }
-
-  if (fullName.length > 80) {
-    return "Full name must be 80 characters or fewer.";
-  }
-
-  return null;
-}
-
-export function validatePassword(password: string) {
-  if (!password) {
-    return "Enter your password.";
-  }
-
-  if (password.length < PASSWORD_MIN_LENGTH) {
-    return `Use at least ${PASSWORD_MIN_LENGTH} characters.`;
-  }
-
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-    return "Include at least one letter and one number.";
-  }
-
-  return null;
 }
 
 export async function hashPassword(password: string) {

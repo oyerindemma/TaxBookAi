@@ -1,35 +1,24 @@
-import { Prisma, Role, SubscriptionPlan, WorkspaceRole } from "@prisma/client";
-import { NextResponse } from "next/server";
+import { Prisma, Role } from "@prisma/client";
+import { hashPassword } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import {
-  buildSessionCookieOptions,
-  createSession,
-  hashPassword,
-  normalizeEmail,
-  normalizeFullName,
-  SESSION_COOKIE_NAME,
-  validateEmail,
-  validateFullName,
-  validatePassword,
-} from "@/lib/auth";
-import { seedDefaultExpenseCategories } from "@/lib/expense-categories";
+  createAuthenticatedResponse,
+  createAuthErrorResponse,
+  createAuthServerErrorResponse,
+  isPrismaTransactionTimeoutError,
+  isUniqueConstraintError,
+  parseJsonRequest,
+} from "@/lib/auth-api";
+import {
+  AUTH_WORKSPACE_BOOTSTRAP_TIMEOUT_MS,
+  provisionStarterWorkspace,
+} from "@/lib/auth-workspace";
+import { LEGAL_VERSION } from "@/lib/config/compliance";
 import { logRouteError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import {
-  buildWorkspaceCookieOptions,
-  WORKSPACE_COOKIE_NAME,
-} from "@/lib/workspaces";
+import { type SignupBody, validateSignupPayload } from "@/lib/auth-validation";
 
 export const runtime = "nodejs";
-
-const WORKSPACE_BOOTSTRAP_TIMEOUT_MS = 15_000;
-const AUTH_DEBUG_ENABLED = process.env.AUTH_DEBUG === "true";
-
-type SignupBody = {
-  email?: unknown;
-  password?: unknown;
-  fullName?: unknown;
-  confirmPassword?: unknown;
-};
 
 const CREATED_USER_SELECT = {
   id: true,
@@ -39,256 +28,109 @@ const CREATED_USER_SELECT = {
   createdAt: true,
 } satisfies Prisma.UserSelect;
 
-function getPrismaErrorMetadata(error: unknown) {
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    return {
-      type: "known_request",
-      code: error.code,
-      clientVersion: error.clientVersion,
-      meta: error.meta ?? null,
-      message: error.message,
-    };
+export async function POST(request: Request) {
+  const parsedBody = await parseJsonRequest<SignupBody>(request);
+  if (!parsedBody.ok) {
+    return parsedBody.response;
   }
 
-  if (error instanceof Prisma.PrismaClientValidationError) {
-    return {
-      type: "validation",
-      message: error.message,
-    };
+  const validation = validateSignupPayload(parsedBody.data);
+  if (!validation.ok) {
+    return createAuthErrorResponse(
+      {
+        error: "Please correct the highlighted fields.",
+        fieldErrors: validation.fieldErrors,
+      },
+      400
+    );
   }
 
-  if (error instanceof Prisma.PrismaClientInitializationError) {
-    return {
-      type: "initialization",
-      errorCode: error.errorCode ?? null,
-      clientVersion: error.clientVersion,
-      message: error.message,
-    };
-  }
+  const { email, password, fullName } = validation.data;
 
-  if (error instanceof Prisma.PrismaClientRustPanicError) {
-    return {
-      type: "rust_panic",
-      clientVersion: error.clientVersion,
-      message: error.message,
-    };
-  }
-
-  if (error instanceof Prisma.PrismaClientUnknownRequestError) {
-    return {
-      type: "unknown_request",
-      clientVersion: error.clientVersion,
-      message: error.message,
-    };
-  }
-
-  return null;
-}
-
-function buildValidationResult(body: SignupBody) {
-  const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
-  const password = typeof body.password === "string" ? body.password : "";
-  const fullName =
-    typeof body.fullName === "string" ? normalizeFullName(body.fullName) : "";
-  const confirmPassword =
-    typeof body.confirmPassword === "string" ? body.confirmPassword : "";
-
-  const fieldErrors: Record<string, string> = {};
-
-  const emailError = validateEmail(email);
-  if (emailError) {
-    fieldErrors.email = emailError;
-  }
-
-  const fullNameError = validateFullName(fullName);
-  if (fullNameError) {
-    fieldErrors.fullName = fullNameError;
-  }
-
-  if (!password.trim()) {
-    fieldErrors.password = "Enter your password.";
-  } else {
-    const passwordError = validatePassword(password);
-    if (passwordError) {
-      fieldErrors.password = passwordError;
-    }
-  }
-
-  if (!confirmPassword) {
-    fieldErrors.confirmPassword = "Confirm your password.";
-  } else if (confirmPassword !== password) {
-    fieldErrors.confirmPassword = "Passwords do not match.";
-  }
-
-  if (Object.keys(fieldErrors).length > 0) {
-    return {
-      ok: false as const,
-      fieldErrors,
-    };
-  }
-
-  return {
-    ok: true as const,
-    email,
-    password,
-    fullName,
-  };
-}
-
-export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as SignupBody;
-    const validation = buildValidationResult(body);
-
-    if (!validation.ok) {
-      return NextResponse.json(
-        {
-          error: "Please correct the highlighted fields.",
-          fieldErrors: validation.fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
-
-    const { email, password, fullName } = validation;
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true },
-    });
-
-    if (existingUser) {
-      return NextResponse.json(
-        {
-          error: "An account already exists for that email. Log in instead.",
-          fieldErrors: {
-            email: "An account already exists for this email address.",
+    const passwordHash = await hashPassword(password);
+    const createdUser = await prisma.$transaction(
+      async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            email,
+            password: passwordHash,
+            fullName,
+            role: Role.USER,
           },
-        },
-        { status: 409 }
-      );
-    }
+          select: CREATED_USER_SELECT,
+        });
 
-    const hashedPassword = await hashPassword(password);
-    const created = await prisma.$transaction(async (tx) => {
-      const userData = {
+        const workspaceId = await provisionStarterWorkspace(tx, {
+          userId: user.id,
+          fullName,
+        });
+
+        return {
+          user,
+          workspaceId,
+        };
+      },
+      { timeout: AUTH_WORKSPACE_BOOTSTRAP_TIMEOUT_MS }
+    );
+
+    try {
+      await Promise.all([
+        logAudit({
+          workspaceId: createdUser.workspaceId,
+          actorUserId: createdUser.user.id,
+          targetUserId: createdUser.user.id,
+          action: "USER_SIGNED_UP",
+          metadata: {
+            legalVersion: LEGAL_VERSION,
+          },
+        }),
+        logAudit({
+          workspaceId: createdUser.workspaceId,
+          actorUserId: createdUser.user.id,
+          targetUserId: createdUser.user.id,
+          action: "LEGAL_TERMS_ACCEPTED",
+          metadata: {
+            legalVersion: LEGAL_VERSION,
+            acceptedAt: new Date().toISOString(),
+            source: "signup",
+          },
+        }),
+      ]);
+    } catch (auditError) {
+      logRouteError("signup audit failed", auditError, {
         email,
-        password: hashedPassword,
-        fullName,
-        role: Role.USER,
-      } satisfies Prisma.UserCreateInput;
-
-      const user = await tx.user.create({
-        data: userData,
-        select: CREATED_USER_SELECT,
+        userId: createdUser.user.id,
+        workspaceId: createdUser.workspaceId,
       });
+    }
 
-      const workspaceData = {
-        name: `${fullName}'s Workspace`,
-      } satisfies Prisma.WorkspaceCreateInput;
-
-      const workspace = await tx.workspace.create({
-        data: workspaceData,
-        select: { id: true },
-      });
-
-      const workspaceMemberData = {
-        workspaceId: workspace.id,
-        userId: user.id,
-        role: WorkspaceRole.OWNER,
-      } satisfies Prisma.WorkspaceMemberUncheckedCreateInput;
-
-      await tx.workspaceMember.create({
-        data: workspaceMemberData,
-      });
-
-      const workspaceSubscriptionData = {
-        workspaceId: workspace.id,
-        plan: SubscriptionPlan.STARTER,
-        status: "free",
-      } satisfies Prisma.WorkspaceSubscriptionUncheckedCreateInput;
-
-      await tx.workspaceSubscription.create({
-        data: workspaceSubscriptionData,
-      });
-
-      await seedDefaultExpenseCategories(tx, workspace.id);
-
-      return {
-        user,
-        workspaceId: workspace.id,
-      };
-    }, { timeout: WORKSPACE_BOOTSTRAP_TIMEOUT_MS });
-
-    const { token, expiresAt } = await createSession(created.user.id);
-    const response = NextResponse.json(
-      {
-        user: created.user,
-      },
-      { status: 201 }
-    );
-
-    response.cookies.set({
-      name: SESSION_COOKIE_NAME,
-      value: token,
-      ...buildSessionCookieOptions(expiresAt),
+    return createAuthenticatedResponse({
+      userId: createdUser.user.id,
+      user: createdUser.user,
+      workspaceId: createdUser.workspaceId,
+      status: 201,
     });
-    response.cookies.set({
-      name: WORKSPACE_COOKIE_NAME,
-      value: String(created.workspaceId),
-      ...buildWorkspaceCookieOptions(),
-    });
-
-    return response;
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      return NextResponse.json(
+    if (isUniqueConstraintError(error, "email")) {
+      return createAuthErrorResponse(
         {
           error: "An account already exists for that email. Log in instead.",
           fieldErrors: {
             email: "An account already exists for this email address.",
           },
         },
-        { status: 409 }
+        409
       );
     }
 
-    const details = error instanceof Error ? error.message : String(error);
-    const prismaError = getPrismaErrorMetadata(error);
-    const prismaDebug =
-      prismaError &&
-      "message" in prismaError &&
-      typeof prismaError.message === "string"
-        ? {
-            prismaCode:
-              "code" in prismaError && typeof prismaError.code === "string"
-                ? prismaError.code
-                : "errorCode" in prismaError && typeof prismaError.errorCode === "string"
-                  ? prismaError.errorCode
-                  : null,
-            prismaMessage: prismaError.message,
-          }
-        : null;
-    logRouteError("/api/signup", error, prismaError ? { prisma: prismaError } : undefined);
-
-    const errorMessage =
-      error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2028"
+    return createAuthServerErrorResponse("/api/signup", error, {
+      message: isPrismaTransactionTimeoutError(error)
         ? "Account setup could not finish because workspace setup timed out. Please try again."
-        : "We could not create your account right now. Please try again.";
-
-    return NextResponse.json(
-      {
-        error: errorMessage,
-        ...((process.env.NODE_ENV !== "production" || AUTH_DEBUG_ENABLED)
-          ? {
-              details,
-              ...(prismaDebug ? { prisma: prismaDebug } : {}),
-            }
-          : {}),
+        : "We could not create your account right now. Please try again.",
+      metadata: {
+        email,
       },
-      { status: 500 }
-    );
+    });
   }
 }

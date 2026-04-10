@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   Bot,
@@ -9,7 +9,6 @@ import {
   FileSearch,
   Loader2,
   MessageSquareText,
-  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -21,53 +20,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type {
+  AssistantAction,
+  AssistantChatResponse,
+  AssistantMessage,
+  AssistantQuickInsight,
+} from "@/lib/assistant-types";
 import { cn } from "@/lib/utils";
 
-type AssistantMetric = {
-  label: string;
-  value: string;
-  detail: string;
-};
-
-type AssistantSource = {
-  id: string;
-  kind: string;
-  title: string;
-  detail: string;
-  href: string | null;
-  badge: string | null;
-};
-
-type AssistantAction = {
-  id: string;
-  label: string;
-  href: string;
-  description: string;
-  intent: "navigate" | "review" | "confirm";
-};
-
-type AssistantResult = {
-  answer: string;
-  supportingMetrics: AssistantMetric[];
-  toolsInvoked: string[];
-  sources: AssistantSource[];
-  followUpActions: AssistantAction[];
-  warnings: string[];
-  mode: "openai" | "fallback";
-  aiEnabled: boolean;
-  requiresConfirmation: boolean;
-  incompleteData: boolean;
-  suggestedPrompts: string[];
-};
-
-type QuickInsight = {
-  id: string;
-  title: string;
-  summary: string;
-  tone: "default" | "secondary" | "outline" | "destructive";
-  href: string;
-  ctaLabel: string;
-};
+type AssistantResult = Omit<AssistantChatResponse, "auditMetadata">;
 
 type ChatMessage =
   | {
@@ -82,10 +43,12 @@ type ChatMessage =
     };
 
 type Props = {
+  workspaceId: number;
   workspaceName: string;
   aiEnabled: boolean;
-  quickInsights: QuickInsight[];
+  quickInsights: AssistantQuickInsight[];
   suggestedPrompts: string[];
+  initialQuestion?: string;
 };
 
 function buildHistory(messages: ChatMessage[]) {
@@ -99,14 +62,19 @@ function buildHistory(messages: ChatMessage[]) {
           role: "assistant" as const,
           content: message.result.answer,
         }
-  );
+  ) satisfies AssistantMessage[];
 }
 
 function messageModeBadge(result: AssistantResult) {
-  if (result.mode === "openai") {
-    return result.aiEnabled ? "Generative" : "Fallback";
+  if (result.provider === "openai" && result.mode === "openai") {
+    return "OpenAI synthesis";
   }
-  return result.aiEnabled ? "Rules backup" : "Rules only";
+
+  if (result.provider === "openai") {
+    return "Grounded fallback";
+  }
+
+  return "Rules only";
 }
 
 function actionVariant(intent: AssistantAction["intent"]) {
@@ -115,7 +83,7 @@ function actionVariant(intent: AssistantAction["intent"]) {
   return "secondary";
 }
 
-function insightToneClasses(tone: QuickInsight["tone"]) {
+function insightToneClasses(tone: AssistantQuickInsight["tone"]) {
   if (tone === "destructive") {
     return "border-destructive/20 bg-destructive/5";
   }
@@ -129,15 +97,23 @@ function insightToneClasses(tone: QuickInsight["tone"]) {
 }
 
 export default function AssistantClient({
+  workspaceId,
   workspaceName,
   aiEnabled,
   quickInsights,
   suggestedPrompts,
+  initialQuestion = "",
 }: Props) {
-  const [question, setQuestion] = useState("");
+  const [question, setQuestion] = useState(initialQuestion);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setQuestion(initialQuestion);
+    setMessages([]);
+    setError(null);
+  }, [initialQuestion]);
 
   async function askAssistant(nextQuestion: string) {
     const trimmedQuestion = nextQuestion.trim();
@@ -159,20 +135,21 @@ export default function AssistantClient({
     setError(null);
 
     try {
-      const res = await fetch("/api/ai/accounting-assistant", {
+      const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          question: trimmedQuestion,
+          workspaceId,
+          message: trimmedQuestion,
           history: buildHistory(messages),
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data?.error ?? "Unable to run finance assistant");
+        setError(data?.error ?? "Unable to explain the workspace numbers");
         return;
       }
 
@@ -181,22 +158,25 @@ export default function AssistantClient({
         role: "assistant",
         result: {
           answer: data.answer,
-          supportingMetrics: Array.isArray(data.supportingMetrics) ? data.supportingMetrics : [],
-          toolsInvoked: Array.isArray(data.toolsInvoked) ? data.toolsInvoked : [],
-          sources: Array.isArray(data.sources) ? data.sources : [],
-          followUpActions: Array.isArray(data.followUpActions) ? data.followUpActions : [],
+          metrics: Array.isArray(data.metrics) ? data.metrics : [],
+          citations: Array.isArray(data.citations) ? data.citations : [],
+          actions: Array.isArray(data.actions) ? data.actions : [],
           warnings: Array.isArray(data.warnings) ? data.warnings : [],
           mode: data.mode === "openai" ? "openai" : "fallback",
+          provider: data.provider === "openai" ? "openai" : "rules",
           aiEnabled: Boolean(data.aiEnabled),
-          requiresConfirmation: Boolean(data.requiresConfirmation),
           incompleteData: Boolean(data.incompleteData),
           suggestedPrompts: Array.isArray(data.suggestedPrompts) ? data.suggestedPrompts : [],
+          status:
+            data.status === "empty" || data.status === "partial" || data.status === "ready"
+              ? data.status
+              : "partial",
         },
       };
 
       setMessages([...nextMessages, assistantMessage]);
     } catch {
-      setError("Network error running finance assistant");
+      setError("Network error running the workspace assistant");
     } finally {
       setLoading(false);
     }
@@ -214,10 +194,10 @@ export default function AssistantClient({
           <CardHeader className="border-b border-border/60">
             <CardTitle className="flex items-center gap-2 text-xl">
               <Bot className="size-5 text-primary" />
-              Workspace copilot
+              Assistant
             </CardTitle>
             <CardDescription>
-              Ask grounded questions about <span className="font-medium text-foreground">{workspaceName}</span>. The assistant stays workspace-scoped, read-only by default, and cites the records it used.
+              Ask grounded questions about <span className="font-medium text-foreground">{workspaceName}</span>. The assistant stays workspace-scoped, read-only by default, and cites the live records it used.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 pt-6">
@@ -226,14 +206,14 @@ export default function AssistantClient({
               <Badge variant="outline">
                 {aiEnabled ? "Generative answers enabled" : "Rules-only fallback"}
               </Badge>
-              <Badge variant="outline">Confirmation before write actions</Badge>
+              <Badge variant="outline">Grounded workspace data only</Badge>
             </div>
 
             <div className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-4">
               <div className="max-h-[58vh] space-y-4 overflow-y-auto pr-1">
                 {messages.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border/70 bg-background/80 p-6 text-sm text-muted-foreground">
-                    Ask about VAT, overdue invoices, bank reconciliation, duplicates, unusual expenses, revenue concentration, or filing readiness. Suggested prompts stay on the right so you can jump in quickly.
+                    Ask what tax is currently due, which transactions need review, why expenses changed, or what is still uncategorized. Suggested prompts stay on the right so you can jump in quickly.
                   </div>
                 ) : null}
 
@@ -254,18 +234,19 @@ export default function AssistantClient({
                           </Badge>
                           <Badge variant="outline">
                             <FileSearch className="size-3" />
-                            {message.result.toolsInvoked.length} tool
-                            {message.result.toolsInvoked.length === 1 ? "" : "s"}
+                            {message.result.citations.length} citation
+                            {message.result.citations.length === 1 ? "" : "s"}
                           </Badge>
-                          {message.result.requiresConfirmation ? (
-                            <Badge variant="outline">
-                              <ShieldCheck className="size-3" />
-                              Confirmation required
-                            </Badge>
-                          ) : null}
                           {message.result.incompleteData ? (
                             <Badge variant="outline">Partial data</Badge>
                           ) : null}
+                          <Badge variant="outline">
+                            {message.result.status === "empty"
+                              ? "Not enough data yet"
+                              : message.result.status === "ready"
+                                ? "Grounded"
+                                : "Provisional"}
+                          </Badge>
                         </div>
 
                         <div className="mt-3 text-sm leading-7 text-foreground">
@@ -281,9 +262,9 @@ export default function AssistantClient({
                         ) : null}
                       </div>
 
-                      {message.result.supportingMetrics.length > 0 ? (
+                      {message.result.metrics.length > 0 ? (
                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                          {message.result.supportingMetrics.map((metric) => (
+                          {message.result.metrics.map((metric) => (
                             <Card key={`${message.id}-${metric.label}`} className="gap-3 border-border/60 py-4">
                               <CardHeader className="gap-1 px-4 pb-0">
                                 <CardDescription>{metric.label}</CardDescription>
@@ -297,13 +278,13 @@ export default function AssistantClient({
                         </div>
                       ) : null}
 
-                      {message.result.sources.length > 0 ? (
+                      {message.result.citations.length > 0 ? (
                         <div className="space-y-2">
                           <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                             Cited records
                           </p>
                           <div className="grid gap-3 md:grid-cols-2">
-                            {message.result.sources.map((source) => (
+                            {message.result.citations.map((source) => (
                               <Card key={`${message.id}-${source.id}`} className="gap-3 border-border/60 py-4">
                                 <CardHeader className="gap-2 px-4 pb-0">
                                   <div className="flex flex-wrap items-center gap-2">
@@ -332,13 +313,13 @@ export default function AssistantClient({
                         </div>
                       ) : null}
 
-                      {message.result.followUpActions.length > 0 ? (
+                      {message.result.actions.length > 0 ? (
                         <div className="space-y-2">
                           <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                             Follow-up actions
                           </p>
                           <div className="grid gap-3 md:grid-cols-2">
-                            {message.result.followUpActions.map((action) => (
+                            {message.result.actions.map((action) => (
                               <Card key={`${message.id}-${action.id}`} className="gap-3 border-border/60 py-4">
                                 <CardHeader className="gap-2 px-4 pb-0">
                                   <div className="flex items-center gap-2">
@@ -397,14 +378,14 @@ export default function AssistantClient({
 
               <form onSubmit={handleSubmit} className="space-y-3">
                 <label htmlFor="assistant-question" className="text-sm font-medium">
-                  Ask the finance assistant
+                  Ask the assistant
                 </label>
                 <textarea
                   id="assistant-question"
                   value={question}
                   onChange={(event) => setQuestion(event.target.value)}
                   rows={4}
-                  placeholder="Ask about VAT, overdue invoices, filing readiness, unmatched bank items, unusual expenses, duplicates, or cash flow pressure..."
+                  placeholder="Ask what tax is due, which items need review, why expenses changed, or what is uncategorized..."
                   className="min-h-[132px] w-full rounded-xl border border-input bg-background px-4 py-3 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
                 <div className="flex flex-wrap gap-2">
@@ -417,7 +398,7 @@ export default function AssistantClient({
                     ) : (
                       <>
                         <MessageSquareText className="size-4" />
-                        Ask assistant
+                        Send question
                       </>
                     )}
                   </Button>
@@ -451,7 +432,7 @@ export default function AssistantClient({
           <CardHeader>
             <CardTitle>Suggested prompts</CardTitle>
             <CardDescription>
-              Fast accountant-friendly questions for this workspace.
+              Fast grounded questions for this workspace.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
@@ -472,9 +453,9 @@ export default function AssistantClient({
 
         <Card className="border-border/70 shadow-sm">
           <CardHeader>
-            <CardTitle>Finance signals</CardTitle>
+            <CardTitle>Live signals</CardTitle>
             <CardDescription>
-              Rule-based workspace insights stay available even when generative mode is off.
+              Workspace insights stay grounded in live data even when generative synthesis is off.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -508,13 +489,13 @@ export default function AssistantClient({
           <CardHeader>
             <CardTitle>Guardrails</CardTitle>
             <CardDescription>
-              The copilot is designed to stay safe with live workspace data.
+              The assistant is designed to stay safe with live workspace data.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
             <p>Answers stay scoped to the active workspace only.</p>
             <p>When data is incomplete, the assistant says so instead of guessing.</p>
-            <p>Navigation and review actions are suggested, but no write action is executed from chat without confirmation.</p>
+            <p>Navigation and review actions are suggested, but no write action is executed from chat.</p>
           </CardContent>
         </Card>
       </div>

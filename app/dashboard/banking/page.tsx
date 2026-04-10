@@ -1,9 +1,24 @@
-import { redirect } from "next/navigation";
 import { FeatureGateCard } from "@/components/billing/feature-gate-card";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
 import { getWorkspaceFeatureAccess } from "@/lib/billing";
 import { getActiveWorkspaceMembership } from "@/lib/workspaces";
+import BankingClient from "./_components/BankingClient";
+
+function getDateInputValueInTimeZone(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === "year")?.value ?? "1970";
+  const month = parts.find((part) => part.type === "month")?.value ?? "01";
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+
+  return `${year}-${month}-${day}`;
+}
 
 export default async function BankingPage() {
   const user = await requireUser();
@@ -19,7 +34,7 @@ export default async function BankingPage() {
         <Card>
           <CardHeader>
             <CardTitle>Select a workspace</CardTitle>
-            <CardDescription>Switch to a workspace to manage banking.</CardDescription>
+            <CardDescription>Switch to a workspace to manage transactions.</CardDescription>
           </CardHeader>
         </Card>
       </section>
@@ -33,7 +48,8 @@ export default async function BankingPage() {
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold">Banking</h1>
           <p className="text-muted-foreground">
-            Banking imports and reconciliation are available from Professional upward.
+            Banking imports, transaction review, and reconciliation are available from
+            Professional upward.
           </p>
         </div>
         <FeatureGateCard
@@ -45,5 +61,11 @@ export default async function BankingPage() {
     );
   }
 
-  redirect("/dashboard/banking/reconcile");
+  return (
+    <BankingClient
+      initialManualDate={getDateInputValueInTimeZone(new Date(), "Africa/Lagos")}
+      role={membership.role}
+      developmentBillingBypass={access.bypassed}
+    />
+  );
 }

@@ -9,12 +9,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import BusinessProfileForm from "@/components/business/business-profile-form";
-import {
-  createBusinessProfileDefaults,
-  DEFAULT_BUSINESS_CURRENCY,
-} from "@/lib/business-profile";
 import { requireUser } from "@/lib/auth";
+import NigerianOnboardingClient from "@/app/onboarding/_components/NigerianOnboardingClient";
+import { buildWorkspaceOnboardingSnapshot } from "@/lib/workspace-onboarding";
 import {
   getActiveWorkspaceMembership,
   isWorkspaceOnboardingComplete,
@@ -51,19 +48,37 @@ export default async function OnboardingPage() {
     redirect("/dashboard");
   }
 
-  const initialValues = createBusinessProfileDefaults({
-    businessName: membership.workspace.businessProfile?.businessName ?? membership.workspace.name,
-    businessType: membership.workspace.businessProfile?.businessType ?? "",
-    industry: membership.workspace.businessProfile?.industry ?? "",
-    country: membership.workspace.businessProfile?.country ?? "Nigeria",
-    state: membership.workspace.businessProfile?.state ?? "",
-    taxIdentificationNumber:
-      membership.workspace.businessProfile?.taxIdentificationNumber ?? "",
-    defaultCurrency:
-      membership.workspace.businessProfile?.defaultCurrency ?? DEFAULT_BUSINESS_CURRENCY,
-    fiscalYearStartMonth: String(
-      membership.workspace.businessProfile?.fiscalYearStartMonth ?? 1
-    ),
+  if (membership.role !== "OWNER" && membership.role !== "ADMIN") {
+    return (
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-12">
+        <Card className="w-full">
+          <CardHeader>
+            <Badge variant="secondary" className="w-fit rounded-full px-4 py-1.5">
+              Workspace onboarding
+            </Badge>
+            <CardTitle className="text-2xl">An admin needs to finish this setup</CardTitle>
+            <CardDescription>
+              This workspace is not ready yet. Ask the owner or an admin to complete the
+              Nigerian onboarding questions so the dashboard can open cleanly.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            <Button asChild>
+              <Link href="/dashboard/workspaces">Open workspaces</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/team">View team</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+  const initialOnboarding = buildWorkspaceOnboardingSnapshot({
+    workspaceName: membership.workspace.name,
+    onboarding: membership.workspace.onboardingProfile,
+    businessProfile: membership.workspace.businessProfile,
   });
 
   return (
@@ -71,35 +86,40 @@ export default async function OnboardingPage() {
       <section className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:items-center">
         <div className="space-y-5">
           <Badge variant="secondary" className="rounded-full px-4 py-1.5">
-            Workspace onboarding
+            Nigerian onboarding
           </Badge>
           <h1 className="text-5xl font-semibold tracking-tight text-balance">
-            Finish setting up your business before entering TaxBook.
+            Set up your Nigerian workspace once, then let TaxBook carry the defaults.
           </h1>
           <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-            TaxBook uses this profile to label the workspace, prepare tax defaults, and keep
-            future multi-business support scoped to the active workspace instead of your user
-            account.
+            We keep this setup short and simple. Your answers help TaxBook decide which
+            modules show up first, what tax guidance to surface early, and the next steps
+            that make sense for your business.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <Card className="border-border/60 bg-white/80 shadow-sm">
               <CardHeader className="pb-3">
-                <CardDescription>Workspace scope</CardDescription>
-                <CardTitle className="text-lg">Saved per workspace</CardTitle>
+                <CardDescription>Saved per workspace</CardDescription>
+                <CardTitle className="text-lg">Resume anytime</CardTitle>
               </CardHeader>
             </Card>
             <Card className="border-border/60 bg-white/80 shadow-sm">
               <CardHeader className="pb-3">
-                <CardDescription>Tax defaults</CardDescription>
-                <CardTitle className="text-lg">NGN and fiscal year ready</CardTitle>
+                <CardDescription>Nigeria-first</CardDescription>
+                <CardTitle className="text-lg">NGN, VAT, and WHT ready</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card className="border-border/60 bg-white/80 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardDescription>Dashboard defaults</CardDescription>
+                <CardTitle className="text-lg">Tools ordered for your role</CardTitle>
               </CardHeader>
             </Card>
           </div>
         </div>
 
-        <BusinessProfileForm
-          initialValues={initialValues}
-          mode="onboarding"
+        <NigerianOnboardingClient
+          initialOnboarding={initialOnboarding}
           workspaceLabel={membership.workspace.name}
         />
       </section>

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCcw, ShieldCheck, Sparkles } from "lucide-react";
+import DashboardPanel from "@/app/dashboard/_components/DashboardPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -26,9 +27,10 @@ type FinancialHealthCardProps = {
     }>;
   };
   canRunIntegrityScan: boolean;
+  referenceTime: string;
 };
 
-function formatRelativeTime(value: string | null) {
+function formatRelativeTime(value: string | null, referenceTime: string) {
   if (!value) {
     return "No integrity scan recorded yet";
   }
@@ -38,9 +40,12 @@ function formatRelativeTime(value: string | null) {
     return "Integrity scan timestamp unavailable";
   }
 
+  const referenceTimestamp = new Date(referenceTime);
+  const now =
+    Number.isNaN(referenceTimestamp.getTime()) ? Date.now() : referenceTimestamp.getTime();
   const diffMinutes = Math.max(
     0,
-    Math.round((Date.now() - timestamp.getTime()) / (60 * 1000))
+    Math.round((now - timestamp.getTime()) / (60 * 1000))
   );
 
   if (diffMinutes < 1) return "Last checked just now";
@@ -60,15 +65,15 @@ function formatRelativeTime(value: string | null) {
 function getLabelBadgeClassName(label: FinancialHealthCardProps["snapshot"]["label"]) {
   switch (label) {
     case "Healthy":
-      return "border-emerald-400/25 bg-emerald-500/10 text-emerald-100";
+      return "border-emerald-200 bg-emerald-50 text-emerald-900";
     case "Stable":
-      return "border-cyan/25 bg-cyan/10 text-cyan";
+      return "border-cyan/20 bg-cyan/10 text-cyan";
     case "Risk":
-      return "border-amber-400/25 bg-amber-500/10 text-amber-100";
+      return "border-amber-200 bg-amber-50 text-amber-900";
     case "Critical":
-      return "border-rose-400/25 bg-rose-500/10 text-rose-100";
+      return "border-rose-200 bg-rose-50 text-rose-900";
     case "Stale":
-      return "border-white/15 bg-white/8 text-white/80";
+      return "border-slate-200 bg-slate-50 text-slate-700";
   }
 }
 
@@ -77,19 +82,20 @@ function getSeverityClassName(
 ) {
   switch (severity) {
     case "CRITICAL":
-      return "text-rose-200";
+      return "text-rose-900";
     case "HIGH":
-      return "text-amber-200";
+      return "text-amber-900";
     case "MEDIUM":
-      return "text-cyan";
+      return "text-sky-900";
     case "LOW":
-      return "text-white/70";
+      return "text-slate-700";
   }
 }
 
 export default function FinancialHealthCard({
   snapshot,
   canRunIntegrityScan,
+  referenceTime,
 }: FinancialHealthCardProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
@@ -129,94 +135,114 @@ export default function FinancialHealthCard({
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white shadow-glow">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-xs uppercase tracking-[0.22em] text-cyan">
-            Financial health
+    <DashboardPanel
+      className="h-full"
+      eyebrow="Executive signal"
+      title="Financial health"
+      description="Integrity coverage across the active workspace so month-end issues surface earlier."
+      icon={snapshot.label === "Healthy" || snapshot.label === "Stable" ? ShieldCheck : Sparkles}
+      iconClassName={
+        snapshot.label === "Healthy" || snapshot.label === "Stable"
+          ? "border-cyan/20 bg-cyan/50 text-cyan"
+          : "border-amber-200 bg-amber-50 text-amber-900"
+      }
+      headerAction={
+        <Badge className={`rounded-full border px-3 py-1 ${getLabelBadgeClassName(snapshot.label)}`}>
+          {snapshot.label}
+        </Badge>
+      }
+    >
+      <div className="space-y-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-2">
+            <div className="text-4xl font-semibold tracking-tight text-slate-950">
+              {snapshot.score}
+            </div>
+            <p className="max-w-xl text-sm leading-6 text-slate-600">
+              {formatRelativeTime(snapshot.lastScanAt, referenceTime)}
+              {snapshot.isStale ? " and the signal is currently stale." : "."}
+            </p>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <div className="text-4xl font-semibold">{snapshot.score}</div>
-            <Badge className={`rounded-full border px-3 py-1 ${getLabelBadgeClassName(snapshot.label)}`}>
-              {snapshot.label}
-            </Badge>
-          </div>
-          <p className="mt-3 text-sm text-slate-300">
-            {formatRelativeTime(snapshot.lastScanAt)}
-            {snapshot.isStale ? " and the signal is currently stale." : "."}
-          </p>
-        </div>
-        <div className="flex size-12 items-center justify-center rounded-2xl bg-white/10">
-          {snapshot.label === "Healthy" || snapshot.label === "Stable" ? (
-            <ShieldCheck className="size-5 text-cyan" />
-          ) : (
-            <Sparkles className="size-5 text-amber-200" />
-          )}
-        </div>
-      </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-4">
-        {[
-          ["Critical", snapshot.issueCountsBySeverity.CRITICAL],
-          ["High", snapshot.issueCountsBySeverity.HIGH],
-          ["Medium", snapshot.issueCountsBySeverity.MEDIUM],
-          ["Low", snapshot.issueCountsBySeverity.LOW],
-        ].map(([label, count]) => (
-          <div key={label} className="rounded-2xl bg-white/8 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-white/55">{label}</div>
-            <div className="mt-2 text-xl font-semibold text-white">{count}</div>
+          <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-4 lg:max-w-[30rem]">
+            {[
+              ["Critical", snapshot.issueCountsBySeverity.CRITICAL],
+              ["High", snapshot.issueCountsBySeverity.HIGH],
+              ["Medium", snapshot.issueCountsBySeverity.MEDIUM],
+              ["Low", snapshot.issueCountsBySeverity.LOW],
+            ].map(([label, count]) => (
+              <div
+                key={label}
+                className="rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-4"
+              >
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {label}
+                </div>
+                <div className="mt-2 text-xl font-semibold tracking-tight text-slate-950">
+                  {count}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
 
-      {snapshot.topIssues.length > 0 ? (
-        <div className="mt-6 space-y-3">
-          <div className="text-xs uppercase tracking-[0.18em] text-white/55">
-            Top open issues
-          </div>
-          {snapshot.topIssues.slice(0, 3).map((issue) => (
-            <div
-              key={`${issue.issueType}-${issue.lastDetectedAt}`}
-              className="rounded-2xl border border-white/10 bg-white/5 p-4"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className={`text-sm font-medium ${getSeverityClassName(issue.severity)}`}>
-                    {issue.issueType}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-300">
-                    {issue.count} open issue{issue.count === 1 ? "" : "s"}
+        {snapshot.topIssues.length > 0 ? (
+          <div className="space-y-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Top open issues
+            </div>
+            <div className="space-y-3">
+              {snapshot.topIssues.slice(0, 3).map((issue) => (
+                <div
+                  key={`${issue.issueType}-${issue.lastDetectedAt}`}
+                  className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div
+                        className={`text-sm font-medium ${getSeverityClassName(issue.severity)}`}
+                      >
+                        {issue.issueType}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {issue.count} open issue{issue.count === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    <Badge className="rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-white">
+                      {issue.severity}
+                    </Badge>
                   </div>
                 </div>
-                <Badge className="rounded-full border border-white/10 bg-white/5 text-white/80 hover:bg-white/5">
-                  {issue.severity}
-                </Badge>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        {canRunIntegrityScan ? (
-          <Button
-            type="button"
-            onClick={handleRunIntegrityScan}
-            disabled={isPending}
-            className="rounded-xl border-0 bg-gradient-primary text-white shadow-glow transition hover:opacity-90"
-          >
-            <RefreshCcw className="mr-2 size-4" />
-            {isPending ? "Running integrity scan..." : "Run integrity scan"}
-          </Button>
+          </div>
         ) : (
-          <Badge className="rounded-full border border-white/10 bg-white/5 text-white/75 hover:bg-white/5">
-            Admin scan controls only
-          </Badge>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
+            No material integrity issues are currently surfacing for this workspace.
+          </div>
         )}
 
-        {message ? <p className="text-sm text-emerald-200">{message}</p> : null}
-        {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+        <div className="flex flex-wrap items-center gap-3">
+          {canRunIntegrityScan ? (
+            <Button
+              type="button"
+              onClick={handleRunIntegrityScan}
+              disabled={isPending}
+              className="rounded-xl border-0 bg-gradient-primary text-white shadow-glow transition hover:opacity-90"
+            >
+              <RefreshCcw className="mr-2 size-4" />
+              {isPending ? "Running integrity scan..." : "Run integrity scan"}
+            </Button>
+          ) : (
+            <Badge className="rounded-full border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-50">
+              Admin scan controls only
+            </Badge>
+          )}
+
+          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
+          {error ? <p className="text-sm text-rose-700">{error}</p> : null}
+        </div>
       </div>
-    </div>
+    </DashboardPanel>
   );
 }

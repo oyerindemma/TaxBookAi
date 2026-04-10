@@ -3,15 +3,15 @@ import { getAuthContext, requireRoleAtLeast } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { getWorkspaceFeatureAccess } from "@/lib/billing";
 import {
-  answerFinanceAssistantQuestion,
-  type FinanceAssistantMessage,
-} from "@/lib/finance-assistant";
+  answerExplainMyNumbersQuestion,
+} from "@/lib/explain-my-numbers-assistant";
+import type { ExplainMyNumbersMessage } from "@/lib/explain-my-numbers-types";
 import { logInfo, logRouteError } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
 function parseHistory(value: unknown) {
-  if (!Array.isArray(value)) return [] as FinanceAssistantMessage[];
+  if (!Array.isArray(value)) return [] as ExplainMyNumbersMessage[];
 
   return value
     .map((item) => {
@@ -26,10 +26,10 @@ function parseHistory(value: unknown) {
       return {
         role,
         content,
-      } satisfies FinanceAssistantMessage;
+      } satisfies ExplainMyNumbersMessage;
     })
     .filter(Boolean)
-    .slice(-8) as FinanceAssistantMessage[];
+    .slice(-8) as ExplainMyNumbersMessage[];
 }
 
 export async function POST(req: Request) {
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const result = await answerFinanceAssistantQuestion({
+    const result = await answerExplainMyNumbersQuestion({
       workspaceId: ctx.workspaceId,
       role: auth.context.role,
       question,
@@ -78,17 +78,18 @@ export async function POST(req: Request) {
     await logAudit({
       workspaceId: ctx.workspaceId,
       actorUserId: ctx.userId,
-      action: "AI_FINANCE_ASSISTANT_ASKED",
+      action: "AI_EXPLAIN_MY_NUMBERS_ASKED",
       metadata: result.auditMetadata,
     });
 
-    logInfo("finance-assistant", "answered workspace question", {
+    logInfo("explain-my-numbers", "answered workspace question", {
       workspaceId: ctx.workspaceId,
       userId: ctx.userId,
       toolsInvoked: result.toolsInvoked,
       sourceCount: result.sources.length,
       actionCount: result.followUpActions.length,
       mode: result.mode,
+      provider: result.provider,
       incompleteData: result.incompleteData,
       requiresConfirmation: result.requiresConfirmation,
     });
@@ -101,18 +102,19 @@ export async function POST(req: Request) {
       followUpActions: result.followUpActions,
       warnings: result.warnings,
       mode: result.mode,
+      provider: result.provider,
       aiEnabled: result.aiEnabled,
       requiresConfirmation: result.requiresConfirmation,
       incompleteData: result.incompleteData,
       suggestedPrompts: result.suggestedPrompts,
     });
   } catch (error) {
-    logRouteError("ai finance assistant failed", error, {
+    logRouteError("explain my numbers assistant failed", error, {
       workspaceId: ctx.workspaceId,
       userId: ctx.userId,
     });
     return NextResponse.json(
-      { error: "Server error running finance assistant" },
+      { error: "Server error running explain my numbers assistant" },
       { status: 500 }
     );
   }

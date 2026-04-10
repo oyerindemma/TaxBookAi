@@ -1,7 +1,5 @@
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -24,18 +22,28 @@ model User {
   bookkeepingUploads               BookkeepingUpload[]        @relation("BookkeepingUploadActor")
   bankStatementImports             BankStatementImport[]      @relation("BankStatementImportActor")
   importedBankTransactions         BankTransaction[]          @relation("BankTransactionActor")
+  reviewedBankTransactions         BankTransaction[]          @relation("BankTransactionReviewer")
+  bankTransactionCategorizationFeedback BankTransactionCategorizationFeedback[] @relation("BankTransactionCategorizationFeedbackActor")
+  bankTransactionBookkeepingFeedback BankTransactionBookkeepingFeedback[] @relation("BankTransactionBookkeepingFeedbackActor")
   ledgerTransactions               LedgerTransaction[]        @relation("LedgerTransactionActor")
   approvedReconciliationMatches    ReconciliationMatch[]      @relation("ReconciliationMatchApprover")
   createdBankTransactionSplitLines BankTransactionSplitLine[] @relation("BankTransactionSplitActor")
   reviewedBookkeepingDrafts        BookkeepingDraft[]         @relation("BookkeepingDraftReviewer")
   reviewedTaxRecords               TaxRecord[]                @relation("TaxRecordReviewer")
   reviewedTaxPeriods               TaxPeriod[]                @relation("TaxPeriodReviewer")
+  reviewedCitPeriods               CITPeriod[]                @relation("CITPeriodReviewer")
   reviewedVatRecords               VATRecord[]                @relation("VatRecordReviewer")
   reviewedWhtRecords               WHTRecord[]                @relation("WhtRecordReviewer")
   createdTaxAdjustments            TaxAdjustment[]            @relation("TaxAdjustmentCreator")
   reviewedFilingDrafts             FilingDraft[]              @relation("FilingDraftReviewer")
   filingEvidenceUploads            FilingEvidence[]           @relation("FilingEvidenceUploader")
   submissionLogs                   SubmissionLog[]            @relation("SubmissionLogActor")
+  workspaceAlertStatusChanges      WorkspaceAlert[]           @relation("WorkspaceAlertStatusActor")
+  expenseLeakFindingStatusChanges  ExpenseLeakFinding[]       @relation("ExpenseLeakFindingStatusActor")
+  createdWhatsAppReceiptConnections WhatsAppReceiptConnection[] @relation("WhatsAppReceiptConnectionCreator")
+  updatedWhatsAppReceiptConnections WhatsAppReceiptConnection[] @relation("WhatsAppReceiptConnectionUpdater")
+  createdWhatsAppReceiptSenderMappings WhatsAppReceiptSenderMapping[] @relation("WhatsAppReceiptSenderMappingCreator")
+  updatedWhatsAppReceiptSenderMappings WhatsAppReceiptSenderMapping[] @relation("WhatsAppReceiptSenderMappingUpdater")
 }
 
 enum Role {
@@ -50,6 +58,7 @@ model Workspace {
   createdAt             DateTime               @default(now())
   archivedAt            DateTime?
   businessProfile       BusinessProfile?
+  onboardingProfile     WorkspaceOnboarding?
   members               WorkspaceMember[]
   taxRecords            TaxRecord[]
   invites               Invite[]
@@ -58,15 +67,23 @@ model Workspace {
   clients               Client[]
   invoices              Invoice[]
   payments              Payment[]
+  paymentProviderConnections PaymentProviderConnection[]
+  paymentProviderEvents      PaymentProviderEvent[]
+  paymentSettlements         PaymentSettlement[]
+  paymentTransactionCandidates PaymentTransactionCandidate[]
   recurringInvoices     RecurringInvoice[]
   bankAccounts          BankAccount[]
   bankStatementImports  BankStatementImport[]
   bankTransactions      BankTransaction[]
+  bankTransactionCategorizationFeedback BankTransactionCategorizationFeedback[]
+  bankTransactionBookkeepingFeedback BankTransactionBookkeepingFeedback[]
   reconciliationMatches ReconciliationMatch[]
   expenseCategories     ExpenseCategory[]
   clientBusinesses      ClientBusiness[]
   bookkeepingUploads    BookkeepingUpload[]
   taxPeriods            TaxPeriod[]
+  citPeriods            CITPeriod[]
+  citBlockers           CITBlocker[]
   taxComputations       TaxComputation[]
   vatRecords            VATRecord[]
   whtRecords            WHTRecord[]
@@ -76,6 +93,11 @@ model Workspace {
   submissionLogs        SubmissionLog[]
   billingWebhookEvents  BillingWebhookEvent[]
   integrityIssues       IntegrityIssue[]
+  alerts                WorkspaceAlert[]
+  expenseLeakFindings   ExpenseLeakFinding[]
+  whatsAppReceiptConnections    WhatsAppReceiptConnection[]
+  whatsAppReceiptSenderMappings WhatsAppReceiptSenderMapping[]
+  whatsAppReceiptMessages       WhatsAppReceiptMessage[]
 
   @@index([archivedAt])
 }
@@ -100,6 +122,34 @@ model BusinessProfile {
   @@index([onboardingCompletedAt])
 }
 
+model WorkspaceOnboarding {
+  id                      Int                      @id @default(autoincrement())
+  workspaceId             Int                      @unique
+  status                  WorkspaceOnboardingStatus @default(IN_PROGRESS)
+  userType                OnboardingUserType?
+  businessName            String?
+  businessType            String?
+  industry                String?
+  country                 String                   @default("Nigeria")
+  state                   String?
+  taxIdentificationNumber String?
+  defaultCurrency         String                   @default("NGN")
+  fiscalYearStartMonth    Int                      @default(1)
+  vatApplicability        TaxApplicability?
+  whtApplicability        TaxApplicability?
+  multiBusinessNeed       MultiBusinessNeed?
+  currentStep             String?
+  draftSavedAt            DateTime?
+  completedAt             DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([completedAt])
+}
+
 model WorkspaceMember {
   id          Int           @id @default(autoincrement())
   workspaceId Int
@@ -119,6 +169,29 @@ enum WorkspaceRole {
   ADMIN
   MEMBER
   VIEWER
+}
+
+enum WorkspaceOnboardingStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum OnboardingUserType {
+  SME_OWNER
+  ACCOUNTANT
+  FINANCE_OPERATOR
+}
+
+enum TaxApplicability {
+  YES
+  NO
+  NOT_SURE
+}
+
+enum MultiBusinessNeed {
+  SINGLE_BUSINESS
+  MULTI_BUSINESS
+  ACCOUNTANT_PORTFOLIO
 }
 
 enum SubscriptionPlan {
@@ -146,6 +219,60 @@ enum PaymentStatus {
   SUCCESS
   FAILED
   CANCELED
+}
+
+enum PaymentIntegrationProvider {
+  PAYSTACK
+}
+
+enum PaymentProviderConnectionStatus {
+  ACTIVE
+  PAUSED
+  ERROR
+}
+
+enum PaymentGatewayEventType {
+  CHARGE_SUCCESS
+  CHARGE_FAILED
+  TRANSFER_SUCCESS
+  TRANSFER_FAILED
+  REFUND
+  UNKNOWN
+}
+
+enum PaymentGatewayEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+enum PaymentSettlementStatus {
+  PENDING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+enum PaymentTransactionCandidateKind {
+  CUSTOMER_PAYMENT
+  SETTLEMENT_PAYOUT
+  PROCESSOR_FEE
+  UNKNOWN
+}
+
+enum PaymentTransactionCandidateStatus {
+  PENDING_REVIEW
+  READY_TO_RECONCILE
+  RECONCILED
+  REJECTED
+}
+
+enum PaymentTaxSuggestionSource {
+  NONE
+  INVOICE
+  PAYMENT_ACTIVITY
+  SETTLEMENT_RULE
 }
 
 enum RecurringInvoiceFrequency {
@@ -183,6 +310,43 @@ enum BankTransactionBusinessType {
   UNKNOWN
 }
 
+enum BankTransactionSource {
+  CSV_IMPORT
+  MANUAL
+}
+
+enum BankTransactionReviewStatus {
+  IMPORTED
+  PENDING_REVIEW
+  REVIEWED
+  POSTED
+  FLAGGED
+}
+
+enum BankTransactionCategorizationFeedbackDecision {
+  APPROVED
+  REJECTED
+  MANUAL_OVERRIDE
+}
+
+enum BankTransactionTaxTreatmentSource {
+  UNSET
+  SUGGESTED
+  MANUAL
+}
+
+enum BankTransactionPostingReadiness {
+  NOT_READY
+  REVIEW_REQUIRED
+  READY_TO_POST
+}
+
+enum BankTransactionBookkeepingFeedbackDecision {
+  APPROVED
+  REJECTED
+  MANUAL_OVERRIDE
+}
+
 enum ReconciliationMatchStatus {
   SUGGESTED
   APPROVED
@@ -201,6 +365,45 @@ enum ReconciliationMatchType {
 enum ClientBusinessStatus {
   ACTIVE
   ARCHIVED
+}
+
+enum WorkspaceAlertType {
+  DUPLICATE_TRANSACTION
+  UNUSUAL_SPIKE
+  MISSING_EVIDENCE
+  TAX_DUE_SOON
+  UNRESOLVED_REVIEW_ITEMS
+  FILING_BLOCKER
+}
+
+enum WorkspaceAlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum WorkspaceAlertStatus {
+  OPEN
+  SNOOZED
+  RESOLVED
+}
+
+enum ExpenseLeakFindingType {
+  RECURRING_SPEND
+  DUPLICATE_VENDOR_CHARGE
+  MONTH_OVER_MONTH_SPIKE
+}
+
+enum ExpenseLeakFindingSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum ExpenseLeakFindingStatus {
+  OPEN
+  DISMISSED
+  RESOLVED
 }
 
 enum LedgerCategoryType {
@@ -306,6 +509,33 @@ enum TaxAdjustmentDirection {
   NEUTRAL
 }
 
+enum CITWorkflowStatus {
+  DRAFT
+  IN_REVIEW
+  READY
+  BLOCKED
+  APPROVED_FOR_EXPORT
+}
+
+enum CITBlockerSeverity {
+  INFO
+  WARNING
+  BLOCKING
+}
+
+enum CITAdjustmentCategory {
+  NON_DEDUCTIBLE_EXPENSE
+  PERSONAL_EXPENSE
+  DONATION
+  DEPRECIATION_ADD_BACK
+  CAPITAL_ALLOWANCE
+  TAX_EXEMPT_INCOME
+  PRIOR_YEAR_LOSS
+  INCENTIVE_DEDUCTION
+  FX_REVALUATION
+  OTHER
+}
+
 enum FilingDraftStatus {
   DRAFT
   READY_FOR_REVIEW
@@ -369,6 +599,35 @@ enum BookkeepingUploadStatus {
   FAILED
 }
 
+enum BookkeepingIngestionChannel {
+  DIRECT_UPLOAD
+  WHATSAPP
+}
+
+enum WhatsAppReceiptProvider {
+  GENERIC_WEBHOOK
+  META_CLOUD_API
+}
+
+enum WhatsAppReceiptConnectionStatus {
+  ACTIVE
+  PAUSED
+  DISCONNECTED
+}
+
+enum WhatsAppReceiptMessageStatus {
+  RECEIVED
+  IGNORED
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum WhatsAppReceiptMediaKind {
+  IMAGE
+  DOCUMENT
+}
+
 enum DraftReviewStatus {
   PENDING
   APPROVED
@@ -406,16 +665,106 @@ model ClientBusiness {
   invoices                  Invoice[]
   taxRecords                TaxRecord[]
   taxPeriods                TaxPeriod[]
+  citPeriods                CITPeriod[]
+  citBlockers               CITBlocker[]
   taxComputations           TaxComputation[]
   vatRecords                VATRecord[]
   whtRecords                WHTRecord[]
   taxAdjustments            TaxAdjustment[]
   filingDrafts              FilingDraft[]
   filingEvidence            FilingEvidence[]
+  workspaceAlerts           WorkspaceAlert[]
+  expenseLeakFindings       ExpenseLeakFinding[]
+  defaultWhatsAppReceiptConnections WhatsAppReceiptConnection[] @relation("WhatsAppReceiptConnectionDefaultBusiness")
+  whatsAppReceiptSenderMappings WhatsAppReceiptSenderMapping[]
+  whatsAppReceiptMessages       WhatsAppReceiptMessage[]
+  defaultPaymentProviderConnections PaymentProviderConnection[] @relation("PaymentProviderConnectionDefaultBusiness")
+  paymentTransactionCandidates      PaymentTransactionCandidate[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
   @@index([workspaceId, archivedAt])
+}
+
+model WorkspaceAlert {
+  id                    Int                    @id @default(autoincrement())
+  workspaceId           Int
+  clientBusinessId      Int?
+  statusChangedByUserId Int?
+  type                  WorkspaceAlertType
+  severity              WorkspaceAlertSeverity @default(INFO)
+  status                WorkspaceAlertStatus   @default(OPEN)
+  dedupeKey             String
+  title                 String
+  message               String
+  explanation           String?
+  recommendedActionLabel String?
+  recommendedActionHref String?
+  primaryRecordType     String?
+  primaryRecordId       Int?
+  primaryRecordHref     String?
+  recordCount           Int                    @default(0)
+  sourceRecordsPayload  String?
+  metadataPayload       String?
+  firstDetectedAt       DateTime               @default(now())
+  lastDetectedAt        DateTime               @default(now())
+  snoozedUntil          DateTime?
+  resolvedAt            DateTime?
+  lastStatusChangedAt   DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clientBusiness  ClientBusiness? @relation(fields: [clientBusinessId], references: [id], onDelete: SetNull)
+  statusChangedBy User?          @relation("WorkspaceAlertStatusActor", fields: [statusChangedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, dedupeKey])
+  @@index([workspaceId, status, severity, lastDetectedAt])
+  @@index([workspaceId, type, status])
+  @@index([clientBusinessId, status, severity])
+  @@index([statusChangedByUserId])
+}
+
+model ExpenseLeakFinding {
+  id                    Int                        @id @default(autoincrement())
+  workspaceId           Int
+  clientBusinessId      Int?
+  statusChangedByUserId Int?
+  type                  ExpenseLeakFindingType
+  severity              ExpenseLeakFindingSeverity @default(INFO)
+  status                ExpenseLeakFindingStatus   @default(OPEN)
+  dedupeKey             String
+  title                 String
+  summary               String
+  explanation           String?
+  estimatedSavingsMinor Int                        @default(0)
+  currency              String                     @default("NGN")
+  recommendedActionLabel String?
+  recommendedActionHref String?
+  primaryRecordType     String?
+  primaryRecordId       Int?
+  primaryRecordHref     String?
+  recordCount           Int                        @default(0)
+  evidencePayload       String?
+  metadataPayload       String?
+  firstDetectedAt       DateTime                   @default(now())
+  lastDetectedAt        DateTime                   @default(now())
+  dismissedAt           DateTime?
+  resolvedAt            DateTime?
+  lastStatusChangedAt   DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clientBusiness  ClientBusiness? @relation(fields: [clientBusinessId], references: [id], onDelete: SetNull)
+  statusChangedBy User?           @relation("ExpenseLeakFindingStatusActor", fields: [statusChangedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, dedupeKey])
+  @@index([workspaceId, status, severity, lastDetectedAt])
+  @@index([workspaceId, type, status])
+  @@index([workspaceId, status, estimatedSavingsMinor])
+  @@index([clientBusinessId, status, severity])
+  @@index([statusChangedByUserId])
 }
 
 model Vendor {
@@ -451,7 +800,13 @@ model TransactionCategory {
   clientBusiness            ClientBusiness             @relation(fields: [clientBusinessId], references: [id], onDelete: Cascade)
   transactions              LedgerTransaction[]
   drafts                    BookkeepingDraft[]
+  bankTransactions          BankTransaction[]
+  suggestedBankTransactions BankTransaction[] @relation("SuggestedBankTransactionCategory")
   bankTransactionSplitLines BankTransactionSplitLine[]
+  suggestedCategorizationFeedback BankTransactionCategorizationFeedback[] @relation("BankTransactionCategorizationSuggestedCategory")
+  selectedCategorizationFeedback BankTransactionCategorizationFeedback[] @relation("BankTransactionCategorizationSelectedCategory")
+  suggestedBookkeepingFeedback BankTransactionBookkeepingFeedback[] @relation("BankTransactionBookkeepingSuggestedCategory")
+  selectedBookkeepingFeedback BankTransactionBookkeepingFeedback[] @relation("BankTransactionBookkeepingSelectedCategory")
 
   @@unique([clientBusinessId, name])
   @@index([clientBusinessId, type, name])
@@ -514,6 +869,7 @@ model BookkeepingUpload {
   sourceType          BookkeepingUploadSource @default(OTHER)
   documentType        BookkeepingDocumentType @default(UNKNOWN)
   status              BookkeepingUploadStatus @default(UPLOADED)
+  ingestionChannel    BookkeepingIngestionChannel @default(DIRECT_UPLOAD)
   uploadSizeBytes     Int?
   fileHash            String?
   fileData            Bytes?
@@ -536,8 +892,10 @@ model BookkeepingUpload {
   duplicateUploads  BookkeepingUpload[] @relation("BookkeepingUploadDuplicates")
   drafts            BookkeepingDraft[]
   filingEvidences   FilingEvidence[]
+  whatsAppReceiptMessage WhatsAppReceiptMessage?
 
   @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, ingestionChannel, createdAt])
   @@index([workspaceId, documentType, createdAt])
   @@index([clientBusinessId, status, createdAt])
   @@index([uploadedByUserId])
@@ -601,6 +959,120 @@ model BookkeepingDraft {
   @@index([reviewedByUserId])
 }
 
+model WhatsAppReceiptConnection {
+  id                           Int                             @id @default(autoincrement())
+  workspaceId                  Int
+  defaultClientBusinessId      Int?
+  createdByUserId              Int?
+  updatedByUserId              Int?
+  provider                     WhatsAppReceiptProvider
+  status                       WhatsAppReceiptConnectionStatus @default(ACTIVE)
+  label                        String
+  webhookInboxKey              String?
+  phoneNumberId                String?
+  displayPhoneNumber           String?
+  normalizedDisplayPhoneNumber String?
+  autoProcess                  Boolean                         @default(true)
+  metadataPayload              String?
+  lastWebhookAt                DateTime?
+  lastInboundAt                DateTime?
+  lastVerificationAt           DateTime?
+  createdAt                    DateTime                        @default(now())
+  updatedAt                    DateTime                        @updatedAt
+
+  workspace             Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  defaultClientBusiness ClientBusiness?         @relation("WhatsAppReceiptConnectionDefaultBusiness", fields: [defaultClientBusinessId], references: [id], onDelete: SetNull)
+  createdBy             User?                   @relation("WhatsAppReceiptConnectionCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy             User?                   @relation("WhatsAppReceiptConnectionUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  senderMappings        WhatsAppReceiptSenderMapping[]
+  messages              WhatsAppReceiptMessage[]
+
+  @@unique([provider, webhookInboxKey])
+  @@unique([provider, phoneNumberId])
+  @@unique([provider, normalizedDisplayPhoneNumber])
+  @@index([workspaceId, status, updatedAt])
+  @@index([defaultClientBusinessId])
+  @@index([createdByUserId])
+  @@index([updatedByUserId])
+}
+
+model WhatsAppReceiptSenderMapping {
+  id                          Int      @id @default(autoincrement())
+  workspaceId                 Int
+  connectionId                Int
+  clientBusinessId            Int
+  createdByUserId             Int?
+  updatedByUserId             Int?
+  senderPhoneNumber           String
+  normalizedSenderPhoneNumber String
+  label                       String?
+  notes                       String?
+  active                      Boolean  @default(true)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  workspace       Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection      WhatsAppReceiptConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  clientBusiness  ClientBusiness            @relation(fields: [clientBusinessId], references: [id], onDelete: Cascade)
+  createdBy       User?                     @relation("WhatsAppReceiptSenderMappingCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy       User?                     @relation("WhatsAppReceiptSenderMappingUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  messages        WhatsAppReceiptMessage[]
+
+  @@unique([connectionId, normalizedSenderPhoneNumber])
+  @@index([workspaceId, normalizedSenderPhoneNumber, active])
+  @@index([clientBusinessId, active])
+  @@index([createdByUserId])
+  @@index([updatedByUserId])
+}
+
+model WhatsAppReceiptMessage {
+  id                          Int                          @id @default(autoincrement())
+  workspaceId                 Int
+  connectionId                Int
+  clientBusinessId            Int?
+  senderMappingId             Int?
+  bookkeepingUploadId         Int?                         @unique
+  provider                    WhatsAppReceiptProvider
+  status                      WhatsAppReceiptMessageStatus @default(RECEIVED)
+  mediaKind                   WhatsAppReceiptMediaKind
+  externalEventId             String?
+  externalMessageId           String
+  externalMediaId             String?
+  dedupeKey                   String
+  senderPhoneNumber           String
+  normalizedSenderPhoneNumber String
+  senderName                  String?
+  recipientPhoneNumber        String?
+  normalizedRecipientPhoneNumber String?
+  phoneNumberId               String?
+  caption                     String?
+  textBody                    String?
+  fileName                    String?
+  fileType                    String?
+  downloadUrl                 String?
+  mediaSha256                 String?
+  failureReason               String?
+  processingNotes             String?
+  metadataPayload             String?
+  rawPayload                  String?
+  receivedAt                  DateTime                     @default(now())
+  processedAt                 DateTime?
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+
+  workspace         Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection        WhatsAppReceiptConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  clientBusiness    ClientBusiness?           @relation(fields: [clientBusinessId], references: [id], onDelete: SetNull)
+  senderMapping     WhatsAppReceiptSenderMapping? @relation(fields: [senderMappingId], references: [id], onDelete: SetNull)
+  bookkeepingUpload BookkeepingUpload?        @relation(fields: [bookkeepingUploadId], references: [id], onDelete: SetNull)
+
+  @@unique([connectionId, dedupeKey])
+  @@index([workspaceId, status, receivedAt])
+  @@index([workspaceId, normalizedSenderPhoneNumber, receivedAt])
+  @@index([clientBusinessId, status, receivedAt])
+  @@index([senderMappingId])
+}
+
 model Client {
   id          Int      @id @default(autoincrement())
   workspaceId Int
@@ -656,6 +1128,9 @@ model Invoice {
   recurringInvoice         RecurringInvoice?     @relation(fields: [recurringInvoiceId], references: [id], onDelete: SetNull)
   items                    InvoiceItem[]
   payments                 Payment[]
+  paymentProviderEvents    PaymentProviderEvent[]
+  paymentTransactionCandidates PaymentTransactionCandidate[] @relation("PaymentCandidateInvoice")
+  suggestedPaymentTransactionCandidates PaymentTransactionCandidate[] @relation("PaymentCandidateSuggestedInvoice")
   taxRecord                TaxRecord?
   approvedBankTransactions BankTransaction[]     @relation("ApprovedBankTransactionInvoice")
   reconciliationMatches    ReconciliationMatch[]
@@ -685,12 +1160,172 @@ model Payment {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  invoice   Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  workspace                    Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invoice                      Invoice                 @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  paymentProviderEvents        PaymentProviderEvent[]
+  paymentTransactionCandidates PaymentTransactionCandidate[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, invoiceId])
   @@index([invoiceId, createdAt])
+}
+
+model PaymentProviderConnection {
+  id                       Int                             @id @default(autoincrement())
+  workspaceId              Int
+  provider                 PaymentIntegrationProvider
+  status                   PaymentProviderConnectionStatus @default(ACTIVE)
+  label                    String
+  defaultClientBusinessId  Int?
+  webhookEnabled           Boolean                         @default(true)
+  autoSyncEnabled          Boolean                         @default(true)
+  autoCreateCandidates     Boolean                         @default(true)
+  settlementSyncWindowDays Int                             @default(30)
+  notes                    String?
+  metadata                 Json?
+  lastWebhookAt            DateTime?
+  lastEventAt              DateTime?
+  lastSyncStartedAt        DateTime?
+  lastSyncCompletedAt      DateTime?
+  lastSettlementSyncAt     DateTime?
+  lastSyncError            String?
+  createdAt                DateTime                        @default(now())
+  updatedAt                DateTime                        @updatedAt
+
+  workspace             Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  defaultClientBusiness ClientBusiness?           @relation("PaymentProviderConnectionDefaultBusiness", fields: [defaultClientBusinessId], references: [id], onDelete: SetNull)
+  events                PaymentProviderEvent[]
+  settlements           PaymentSettlement[]
+  transactionCandidates PaymentTransactionCandidate[]
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId, status, provider])
+  @@index([defaultClientBusinessId])
+}
+
+model PaymentProviderEvent {
+  id                   Int                       @id @default(autoincrement())
+  workspaceId          Int
+  connectionId         Int
+  invoiceId            Int?
+  paymentId            Int?
+  provider             PaymentIntegrationProvider
+  eventType            PaymentGatewayEventType
+  status               PaymentGatewayEventStatus @default(RECEIVED)
+  dedupeKey            String
+  externalEventId      String?
+  reference            String?
+  amountMinor          Int?
+  feesAmountMinor      Int?
+  netAmountMinor       Int?
+  currency             String                    @default("NGN")
+  occurredAt           DateTime
+  payload              Json?
+  processingError      String?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+
+  workspace             Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection            PaymentProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  invoice               Invoice?                  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  payment               Payment?                  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  transactionCandidates PaymentTransactionCandidate[]
+
+  @@unique([connectionId, dedupeKey])
+  @@index([workspaceId, status, occurredAt])
+  @@index([connectionId, eventType, occurredAt])
+  @@index([invoiceId])
+  @@index([paymentId])
+  @@index([reference])
+}
+
+model PaymentSettlement {
+  id                      Int                        @id @default(autoincrement())
+  workspaceId             Int
+  connectionId            Int
+  provider                PaymentIntegrationProvider
+  externalSettlementId    String
+  status                  PaymentSettlementStatus    @default(PENDING)
+  settlementDate          DateTime?
+  currency                String                     @default("NGN")
+  grossAmountMinor        Int                        @default(0)
+  feesAmountMinor         Int                        @default(0)
+  netAmountMinor          Int                        @default(0)
+  transactionCount        Int                        @default(0)
+  bankCode                String?
+  bankAccountName         String?
+  bankAccountNumberMasked String?
+  payload                 Json?
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+
+  workspace             Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection            PaymentProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  transactionCandidates PaymentTransactionCandidate[]
+
+  @@unique([connectionId, externalSettlementId])
+  @@index([workspaceId, status, settlementDate])
+  @@index([connectionId, settlementDate])
+}
+
+model PaymentTransactionCandidate {
+  id                         Int                              @id @default(autoincrement())
+  workspaceId                Int
+  connectionId               Int
+  clientBusinessId           Int?
+  invoiceId                  Int?
+  suggestedInvoiceId         Int?
+  paymentId                  Int?
+  bankTransactionId          Int?
+  suggestedBankTransactionId Int?
+  sourceEventId              Int?                             @unique
+  sourceSettlementId         Int?                             @unique
+  provider                   PaymentIntegrationProvider
+  kind                       PaymentTransactionCandidateKind
+  status                     PaymentTransactionCandidateStatus @default(PENDING_REVIEW)
+  externalReference          String?
+  description                String
+  counterpartyName           String?
+  amountMinor                Int
+  feesAmountMinor            Int                              @default(0)
+  netAmountMinor             Int                              @default(0)
+  currency                   String                           @default("NGN")
+  occurredAt                 DateTime
+  confidenceScore            Float                            @default(0)
+  suggestedVatTreatment      VatTreatment                     @default(NONE)
+  suggestedWhtTreatment      WhtTreatment                     @default(NONE)
+  taxSuggestionSource        PaymentTaxSuggestionSource       @default(NONE)
+  taxSuggestionReason        String?
+  invoiceMatchScore          Float?
+  bankMatchScore             Float?
+  reconciliationReason       String?
+  metadata                   Json?
+  reviewNotes                String?
+  reviewedAt                 DateTime?
+  createdAt                  DateTime                         @default(now())
+  updatedAt                  DateTime                         @updatedAt
+
+  workspace                 Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection                PaymentProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  clientBusiness            ClientBusiness?           @relation(fields: [clientBusinessId], references: [id], onDelete: SetNull)
+  invoice                   Invoice?                  @relation("PaymentCandidateInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
+  suggestedInvoice          Invoice?                  @relation("PaymentCandidateSuggestedInvoice", fields: [suggestedInvoiceId], references: [id], onDelete: SetNull)
+  payment                   Payment?                  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  bankTransaction           BankTransaction?          @relation("PaymentCandidateBankTransaction", fields: [bankTransactionId], references: [id], onDelete: SetNull)
+  suggestedBankTransaction  BankTransaction?          @relation("PaymentCandidateSuggestedBankTransaction", fields: [suggestedBankTransactionId], references: [id], onDelete: SetNull)
+  sourceEvent               PaymentProviderEvent?     @relation(fields: [sourceEventId], references: [id], onDelete: SetNull)
+  sourceSettlement          PaymentSettlement?        @relation(fields: [sourceSettlementId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, occurredAt])
+  @@index([connectionId, kind, status])
+  @@index([workspaceId, externalReference])
+  @@index([clientBusinessId, occurredAt])
+  @@index([invoiceId])
+  @@index([suggestedInvoiceId])
+  @@index([bankTransactionId])
+  @@index([suggestedBankTransactionId])
+  @@index([sourceEventId])
+  @@index([sourceSettlementId])
 }
 
 model InvoiceItem {
@@ -954,6 +1589,7 @@ model TaxPeriod {
   clientBusiness ClientBusiness?  @relation(fields: [clientBusinessId], references: [id], onDelete: SetNull)
   reviewedBy     User?            @relation("TaxPeriodReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
   computations   TaxComputation[]
+  citPeriod      CITPeriod?
   vatRecords     VATRecord[]
   whtRecords     WHTRecord[]
   adjustments    TaxAdjustment[]
@@ -994,6 +1630,7 @@ model TaxComputation {
   workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   clientBusiness ClientBusiness? @relation(fields: [clientBusinessId], references: [id], onDelete: SetNull)
   taxPeriod      TaxPeriod       @relation(fields: [taxPeriodId], references: [id], onDelete: Cascade)
+  citPeriod      CITPeriod?
 
   @@unique([taxPeriodId, taxType])
   @@index([workspaceId, taxType, computedAt])
@@ -1116,6 +1753,7 @@ model TaxAdjustment {
   taxPeriodId      Int
   taxType          TaxType
   direction        TaxAdjustmentDirection
+  citCategory      CITAdjustmentCategory?
   label            String
   amountMinor      Int
   reason           String?
@@ -1130,6 +1768,7 @@ model TaxAdjustment {
   taxPeriod      TaxPeriod       @relation(fields: [taxPeriodId], references: [id], onDelete: Cascade)
   createdBy      User?           @relation("TaxAdjustmentCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   filingItems    FilingItem[]
+  evidence       FilingEvidence[]
 
   @@index([workspaceId, taxType, createdAt])
   @@index([clientBusinessId, taxType, createdAt])
@@ -1168,6 +1807,7 @@ model FilingDraft {
   clientBusiness ClientBusiness?  @relation(fields: [clientBusinessId], references: [id], onDelete: SetNull)
   taxPeriod      TaxPeriod        @relation(fields: [taxPeriodId], references: [id], onDelete: Cascade)
   reviewedBy     User?            @relation("FilingDraftReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  citPeriod      CITPeriod?
   items          FilingItem[]
   evidence       FilingEvidence[]
   submissions    SubmissionLog[]
@@ -1176,6 +1816,61 @@ model FilingDraft {
   @@index([workspaceId, taxType, status])
   @@index([clientBusinessId, taxType, status])
   @@index([reviewedByUserId])
+}
+
+model CITPeriod {
+  id               Int               @id @default(autoincrement())
+  workspaceId      Int
+  clientBusinessId Int?
+  taxPeriodId      Int               @unique
+  computationId    Int?              @unique
+  filingDraftId    Int?              @unique
+  status           CITWorkflowStatus @default(DRAFT)
+  blockerCount     Int               @default(0)
+  note             String?
+  evidenceNote     String?
+  summaryPayload   String?
+  exportedAt       DateTime?
+  reviewedAt       DateTime?
+  reviewedByUserId Int?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clientBusiness ClientBusiness? @relation(fields: [clientBusinessId], references: [id], onDelete: SetNull)
+  taxPeriod      TaxPeriod       @relation(fields: [taxPeriodId], references: [id], onDelete: Cascade)
+  computation    TaxComputation? @relation(fields: [computationId], references: [id], onDelete: SetNull)
+  filingDraft    FilingDraft?    @relation(fields: [filingDraftId], references: [id], onDelete: SetNull)
+  reviewedBy     User?           @relation("CITPeriodReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  blockers       CITBlocker[]
+  evidence       FilingEvidence[]
+
+  @@index([workspaceId, status, updatedAt])
+  @@index([clientBusinessId, status, updatedAt])
+  @@index([reviewedByUserId])
+}
+
+model CITBlocker {
+  id               Int                @id @default(autoincrement())
+  workspaceId      Int
+  clientBusinessId Int?
+  citPeriodId      Int
+  code             String
+  severity         CITBlockerSeverity @default(WARNING)
+  title            String
+  detail           String
+  href             String?
+  resolved         Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clientBusiness ClientBusiness? @relation(fields: [clientBusinessId], references: [id], onDelete: SetNull)
+  citPeriod      CITPeriod       @relation(fields: [citPeriodId], references: [id], onDelete: Cascade)
+
+  @@unique([citPeriodId, code])
+  @@index([workspaceId, severity, resolved])
+  @@index([clientBusinessId, severity, resolved])
 }
 
 model FilingItem {
@@ -1215,6 +1910,8 @@ model FilingEvidence {
   bookkeepingUploadId Int?
   vatRecordId         Int?
   whtRecordId         Int?
+  taxAdjustmentId     Int?
+  citPeriodId         Int?
   label               String
   evidenceKind        FilingEvidenceKind @default(SOURCE_DOCUMENT)
   note                String?
@@ -1230,6 +1927,8 @@ model FilingEvidence {
   bookkeepingUpload BookkeepingUpload? @relation(fields: [bookkeepingUploadId], references: [id], onDelete: SetNull)
   vatRecord         VATRecord?         @relation(fields: [vatRecordId], references: [id], onDelete: SetNull)
   whtRecord         WHTRecord?         @relation(fields: [whtRecordId], references: [id], onDelete: SetNull)
+  taxAdjustment     TaxAdjustment?     @relation(fields: [taxAdjustmentId], references: [id], onDelete: SetNull)
+  citPeriod         CITPeriod?         @relation(fields: [citPeriodId], references: [id], onDelete: SetNull)
   uploadedBy        User?              @relation("FilingEvidenceUploader", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, createdAt])
@@ -1239,6 +1938,8 @@ model FilingEvidence {
   @@index([bookkeepingUploadId])
   @@index([vatRecordId])
   @@index([whtRecordId])
+  @@index([taxAdjustmentId])
+  @@index([citPeriodId])
   @@index([uploadedByUserId])
 }
 
@@ -1331,61 +2032,174 @@ model BankStatementImport {
 }
 
 model BankTransaction {
-  id                         Int                         @id @default(autoincrement())
-  workspaceId                Int
-  clientBusinessId           Int?
-  bankAccountId              Int
-  statementImportId          Int?
-  uploadedByUserId           Int?
-  matchedLedgerTransactionId Int?
-  matchedInvoiceId           Int?
-  transactionDate            DateTime
-  description                String
-  reference                  String?
-  amount                     Int
-  debitAmountMinor           Int?
-  creditAmountMinor          Int?
-  balanceAmountMinor         Int?
-  type                       BankTransactionType
-  status                     BankTransactionStatus       @default(UNMATCHED)
-  sourceRowNumber            Int?
-  rawRowPayload              String?
-  currency                   String                      @default("NGN")
-  suggestedType              BankTransactionBusinessType @default(UNKNOWN)
-  suggestedCounterparty      String?
-  suggestedCategoryName      String?
-  suggestedVatTreatment      VatTreatment                @default(NONE)
-  suggestedWhtTreatment      WhtTreatment                @default(NONE)
-  suggestedNarrationMeaning  String?
-  confidenceScore            Float?
-  categorizationProvider     String?
-  reviewNotes                String?
-  matchedAt                  DateTime?
-  ignoredAt                  DateTime?
-  createdAt                  DateTime                    @default(now())
-  updatedAt                  DateTime                    @updatedAt
+  id                             Int                              @id @default(autoincrement())
+  workspaceId                    Int
+  clientBusinessId               Int?
+  bankAccountId                  Int
+  statementImportId              Int?
+  uploadedByUserId               Int?
+  categoryId                     Int?
+  suggestedCategoryId            Int?
+  matchedLedgerTransactionId     Int?
+  matchedInvoiceId               Int?
+  possibleDuplicateOfTransactionId Int?
+  transactionDate                DateTime
+  description                    String
+  reference                      String?
+  amount                         Int
+  debitAmountMinor               Int?
+  creditAmountMinor              Int?
+  balanceAmountMinor             Int?
+  type                           BankTransactionType
+  source                         BankTransactionSource           @default(CSV_IMPORT)
+  status                         BankTransactionStatus           @default(UNMATCHED)
+  reviewStatus                   BankTransactionReviewStatus     @default(IMPORTED)
+  fingerprintHash                String?
+  sourceRowNumber                Int?
+  rawRowPayload                  String?
+  currency                       String                           @default("NGN")
+  suggestedType                  BankTransactionBusinessType      @default(UNKNOWN)
+  suggestedCounterparty          String?
+  suggestedCategoryName          String?
+  vatTreatment                   VatTreatment                     @default(NONE)
+  whtTreatment                   WhtTreatment                     @default(NONE)
+  vatRate                        Float                            @default(0)
+  whtRate                        Float                            @default(0)
+  vatAmountMinor                 Int                              @default(0)
+  whtAmountMinor                 Int                              @default(0)
+  taxTreatmentSource             BankTransactionTaxTreatmentSource @default(UNSET)
+  suggestedVatTreatment          VatTreatment                     @default(NONE)
+  suggestedWhtTreatment          WhtTreatment                     @default(NONE)
+  suggestedNarrationMeaning      String?
+  confidenceScore                Float?
+  categorizationProvider         String?
+  suggestionConfidence           Float?
+  suggestionReason               String?
+  normalizedDescription          String?
+  normalizedMerchantName         String?
+  autoBookkeepingConfidence      Float?
+  autoBookkeepingReason          String?
+  autoBookkeepingProvider        String?
+  autoBookkeepingProcessedAt     DateTime?
+  postingReadiness               BankTransactionPostingReadiness  @default(NOT_READY)
+  duplicateConfidence            Float?
+  duplicateReason                String?
+  suspiciousPatternScore         Float?
+  suspiciousPatternReason        String?
+  reviewNotes                    String?
+  reviewedAt                     DateTime?
+  reviewedByUserId               Int?
+  matchedAt                      DateTime?
+  ignoredAt                      DateTime?
+  createdAt                      DateTime                         @default(now())
+  updatedAt                      DateTime                         @updatedAt
 
-  workspace                Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  clientBusiness           ClientBusiness?            @relation(fields: [clientBusinessId], references: [id], onDelete: SetNull)
-  bankAccount              BankAccount                @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
-  statementImport          BankStatementImport?       @relation(fields: [statementImportId], references: [id], onDelete: SetNull)
-  uploadedBy               User?                      @relation("BankTransactionActor", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
-  matchedLedgerTransaction LedgerTransaction?         @relation("ApprovedBankTransactionLedger", fields: [matchedLedgerTransactionId], references: [id], onDelete: SetNull)
-  matchedInvoice           Invoice?                   @relation("ApprovedBankTransactionInvoice", fields: [matchedInvoiceId], references: [id], onDelete: SetNull)
-  matches                  ReconciliationMatch[]
-  ledgerTransactions       LedgerTransaction[]        @relation("BankTransactionLedgerEntries")
-  taxRecords               TaxRecord[]                @relation("BankTransactionTaxRecords")
-  splitLines               BankTransactionSplitLine[]
-  vatrecords               VATRecord[]
-  whtrecords               WHTRecord[]
+  workspace                    Workspace                           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clientBusiness               ClientBusiness?                     @relation(fields: [clientBusinessId], references: [id], onDelete: SetNull)
+  bankAccount                  BankAccount                         @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  statementImport              BankStatementImport?                @relation(fields: [statementImportId], references: [id], onDelete: SetNull)
+  uploadedBy                   User?                               @relation("BankTransactionActor", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  reviewedBy                   User?                               @relation("BankTransactionReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  category                     TransactionCategory?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  suggestedCategory            TransactionCategory?                @relation("SuggestedBankTransactionCategory", fields: [suggestedCategoryId], references: [id], onDelete: SetNull)
+  matchedLedgerTransaction     LedgerTransaction?                  @relation("ApprovedBankTransactionLedger", fields: [matchedLedgerTransactionId], references: [id], onDelete: SetNull)
+  matchedInvoice               Invoice?                            @relation("ApprovedBankTransactionInvoice", fields: [matchedInvoiceId], references: [id], onDelete: SetNull)
+  possibleDuplicateOf          BankTransaction?                    @relation("BankTransactionPossibleDuplicate", fields: [possibleDuplicateOfTransactionId], references: [id], onDelete: SetNull)
+  possibleDuplicates           BankTransaction[]                   @relation("BankTransactionPossibleDuplicate")
+  matches                      ReconciliationMatch[]
+  categorizationFeedback       BankTransactionCategorizationFeedback[]
+  bookkeepingFeedback          BankTransactionBookkeepingFeedback[]
+  ledgerTransactions           LedgerTransaction[]                 @relation("BankTransactionLedgerEntries")
+  taxRecords                   TaxRecord[]                         @relation("BankTransactionTaxRecords")
+  splitLines                   BankTransactionSplitLine[]
+  vatrecords                   VATRecord[]
+  whtrecords                   WHTRecord[]
+  paymentTransactionCandidates PaymentTransactionCandidate[]       @relation("PaymentCandidateBankTransaction")
+  suggestedPaymentTransactionCandidates PaymentTransactionCandidate[] @relation("PaymentCandidateSuggestedBankTransaction")
 
   @@index([workspaceId, transactionDate])
   @@index([workspaceId, status, transactionDate])
+  @@index([workspaceId, reviewStatus, transactionDate])
+  @@index([workspaceId, postingReadiness, transactionDate])
+  @@index([workspaceId, source, transactionDate])
+  @@index([workspaceId, categoryId, transactionDate])
+  @@index([workspaceId, suggestedCategoryId, transactionDate])
+  @@index([workspaceId, autoBookkeepingConfidence, transactionDate])
+  @@index([workspaceId, normalizedMerchantName, transactionDate])
+  @@index([workspaceId, vatTreatment, transactionDate])
+  @@index([workspaceId, whtTreatment, transactionDate])
+  @@index([workspaceId, taxTreatmentSource, transactionDate])
   @@index([bankAccountId, transactionDate])
   @@index([clientBusinessId, transactionDate])
+  @@index([categoryId])
+  @@index([suggestedCategoryId])
+  @@index([reviewedByUserId, transactionDate])
   @@index([statementImportId, sourceRowNumber])
   @@index([matchedLedgerTransactionId])
   @@index([matchedInvoiceId])
+  @@index([possibleDuplicateOfTransactionId])
+  @@unique([workspaceId, bankAccountId, fingerprintHash])
+}
+
+model BankTransactionCategorizationFeedback {
+  id                   Int                                           @id @default(autoincrement())
+  workspaceId          Int
+  transactionId        Int
+  actorUserId          Int?
+  suggestedCategoryId  Int?
+  selectedCategoryId   Int?
+  decision             BankTransactionCategorizationFeedbackDecision
+  suggestionConfidence Float?
+  suggestionReason     String?
+  provider             String?
+  note                 String?
+  createdAt            DateTime                                      @default(now())
+
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  transaction        BankTransaction     @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  actor              User?               @relation("BankTransactionCategorizationFeedbackActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  suggestedCategory  TransactionCategory? @relation("BankTransactionCategorizationSuggestedCategory", fields: [suggestedCategoryId], references: [id], onDelete: SetNull)
+  selectedCategory   TransactionCategory? @relation("BankTransactionCategorizationSelectedCategory", fields: [selectedCategoryId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([transactionId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([suggestedCategoryId])
+  @@index([selectedCategoryId])
+}
+
+model BankTransactionBookkeepingFeedback {
+  id                     Int                                      @id @default(autoincrement())
+  workspaceId            Int
+  transactionId          Int
+  actorUserId            Int?
+  suggestedCategoryId    Int?
+  selectedCategoryId     Int?
+  suggestedVatTreatment  VatTreatment                             @default(NONE)
+  selectedVatTreatment   VatTreatment                             @default(NONE)
+  suggestedWhtTreatment  WhtTreatment                             @default(NONE)
+  selectedWhtTreatment   WhtTreatment                             @default(NONE)
+  suggestedConfidence    Float?
+  duplicateConfidence    Float?
+  suspiciousPatternScore Float?
+  postingReadiness       BankTransactionPostingReadiness          @default(NOT_READY)
+  decision               BankTransactionBookkeepingFeedbackDecision
+  provider               String?
+  reason                 String?
+  note                   String?
+  createdAt              DateTime                                 @default(now())
+
+  workspace          Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  transaction        BankTransaction      @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  actor              User?                @relation("BankTransactionBookkeepingFeedbackActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  suggestedCategory  TransactionCategory? @relation("BankTransactionBookkeepingSuggestedCategory", fields: [suggestedCategoryId], references: [id], onDelete: SetNull)
+  selectedCategory   TransactionCategory? @relation("BankTransactionBookkeepingSelectedCategory", fields: [selectedCategoryId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([transactionId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([suggestedCategoryId])
+  @@index([selectedCategoryId])
 }
 
 model ReconciliationMatch {

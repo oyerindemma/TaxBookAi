@@ -1,211 +1,92 @@
 import { Prisma } from "@prisma/client";
-import { NextResponse } from "next/server";
+import { verifyPassword } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import {
-  buildSessionCookieOptions,
-  createSession,
-  normalizeEmail,
-  SESSION_COOKIE_NAME,
-  validateEmail,
-  verifyPassword,
-} from "@/lib/auth";
-import { seedDefaultExpenseCategories } from "@/lib/expense-categories";
-import { logInfo, logRouteError } from "@/lib/logger";
+  createAuthenticatedResponse,
+  createAuthErrorResponse,
+  createAuthServerErrorResponse,
+  parseJsonRequest,
+} from "@/lib/auth-api";
+import { ensureActiveWorkspaceForUser } from "@/lib/auth-workspace";
+import { logRouteError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import {
-  buildWorkspaceCookieOptions,
-  WORKSPACE_COOKIE_NAME,
-} from "@/lib/workspaces";
+import { type LoginBody, validateLoginPayload } from "@/lib/auth-validation";
 
 export const runtime = "nodejs";
 
-type LoginBody = {
-  email?: unknown;
-  password?: unknown;
-};
+const AUTHENTICATED_USER_SELECT = {
+  id: true,
+  email: true,
+  password: true,
+  fullName: true,
+  role: true,
+  createdAt: true,
+} satisfies Prisma.UserSelect;
 
-const WORKSPACE_BOOTSTRAP_TIMEOUT_MS = 15_000;
-const LOGIN_DEBUG_ENABLED = process.env.AUTH_DEBUG === "true";
-
-function logLoginDebug(message: string, metadata?: Record<string, unknown>) {
-  if (!LOGIN_DEBUG_ENABLED) return;
-  logInfo("auth-login", message, metadata);
-}
-
-function buildValidationResult(body: LoginBody) {
-  const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
-  const password = typeof body.password === "string" ? body.password : "";
-  const fieldErrors: Record<string, string> = {};
-
-  const emailError = validateEmail(email);
-  if (emailError) {
-    fieldErrors.email = emailError;
+export async function POST(request: Request) {
+  const parsedBody = await parseJsonRequest<LoginBody>(request);
+  if (!parsedBody.ok) {
+    return parsedBody.response;
   }
 
-  if (!password.trim()) {
-    fieldErrors.password = "Enter your password.";
+  const validation = validateLoginPayload(parsedBody.data);
+  if (!validation.ok) {
+    return createAuthErrorResponse(
+      {
+        error: "Please enter both your email and password.",
+        fieldErrors: validation.fieldErrors,
+      },
+      400
+    );
   }
 
-  if (Object.keys(fieldErrors).length > 0) {
-    return {
-      ok: false as const,
-      fieldErrors,
-    };
-  }
+  const { email, password } = validation.data;
 
-  return {
-    ok: true as const,
-    email,
-    password,
-  };
-}
-
-export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as LoginBody;
-    const validation = buildValidationResult(body);
-
-    if (!validation.ok) {
-      return NextResponse.json(
-        {
-          error: "Please enter both your email and password.",
-          fieldErrors: validation.fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
-
-    const { email, password: inputPassword } = validation;
-    logLoginDebug("Validated login request", { email });
-
     const user = await prisma.user.findUnique({
       where: { email },
-      select: {
-        id: true,
-        email: true,
-        password: true,
-        fullName: true,
-        role: true,
-        createdAt: true,
-      },
-    });
-
-    logLoginDebug("Completed user lookup", {
-      email,
-      found: Boolean(user),
-      userId: user?.id ?? null,
+      select: AUTHENTICATED_USER_SELECT,
     });
 
     if (!user) {
-      return NextResponse.json(
+      return createAuthErrorResponse(
         { error: "Invalid email or password." },
-        { status: 401 }
+        401
       );
     }
 
-    const passwordMatches = await verifyPassword(inputPassword, user.password);
-
-    logLoginDebug("Completed password comparison", {
-      userId: user.id,
-      passwordMatches,
-    });
-
+    const passwordMatches = await verifyPassword(password, user.password);
     if (!passwordMatches) {
-      return NextResponse.json(
+      return createAuthErrorResponse(
         { error: "Invalid email or password." },
-        { status: 401 }
+        401
       );
     }
 
-    const membership = await prisma.workspaceMember.findFirst({
-      where: {
-        userId: user.id,
-        workspace: {
-          archivedAt: null,
-        },
-      },
-      orderBy: {
-        workspace: {
-          name: "asc",
-        },
-      },
-      select: {
-        workspaceId: true,
-      },
-    });
-
-    logLoginDebug("Checked active workspace membership", {
+    const workspaceId = await ensureActiveWorkspaceForUser({
       userId: user.id,
-      workspaceId: membership?.workspaceId ?? null,
+      fullName: user.fullName,
     });
 
-    let workspaceId = membership?.workspaceId;
-
-    if (!workspaceId) {
-      const totalMemberships = await prisma.workspaceMember.count({
-        where: { userId: user.id },
+    try {
+      await logAudit({
+        workspaceId,
+        actorUserId: user.id,
+        targetUserId: user.id,
+        action: "USER_LOGGED_IN",
+        metadata: {
+          loginAt: new Date().toISOString(),
+        },
       });
-
-      logLoginDebug("Counted workspace memberships", {
+    } catch (auditError) {
+      logRouteError("login audit failed", auditError, {
         userId: user.id,
-        totalMemberships,
+        workspaceId,
       });
-
-      if (totalMemberships === 0) {
-        logLoginDebug("Bootstrapping default workspace", {
-          userId: user.id,
-          timeoutMs: WORKSPACE_BOOTSTRAP_TIMEOUT_MS,
-        });
-
-        const workspace = await prisma.$transaction(
-          async (tx) => {
-            const createdWorkspace = await tx.workspace.create({
-              data: {
-                name: `${user.fullName}'s Workspace`,
-              },
-              select: { id: true },
-            });
-
-            await tx.workspaceMember.create({
-              data: {
-                workspaceId: createdWorkspace.id,
-                userId: user.id,
-                role: "OWNER",
-              },
-            });
-
-            await tx.workspaceSubscription.create({
-              data: {
-                workspaceId: createdWorkspace.id,
-                plan: "STARTER",
-                status: "free",
-              },
-            });
-
-            await seedDefaultExpenseCategories(tx, createdWorkspace.id);
-
-            return createdWorkspace;
-          },
-          { timeout: WORKSPACE_BOOTSTRAP_TIMEOUT_MS }
-        );
-
-        workspaceId = workspace.id;
-
-        logLoginDebug("Bootstrapped default workspace", {
-          userId: user.id,
-          workspaceId,
-        });
-      }
     }
 
-    const { token, expiresAt } = await createSession(user.id);
-
-    logLoginDebug("Created session for login response", {
+    return createAuthenticatedResponse({
       userId: user.id,
-      expiresAt: expiresAt.toISOString(),
-      workspaceId: workspaceId ?? null,
-    });
-
-    const response = NextResponse.json({
       user: {
         id: user.id,
         email: user.email,
@@ -213,47 +94,14 @@ export async function POST(req: Request) {
         role: user.role,
         createdAt: user.createdAt,
       },
+      workspaceId,
     });
-
-    response.cookies.set({
-      name: SESSION_COOKIE_NAME,
-      value: token,
-      ...buildSessionCookieOptions(expiresAt),
-    });
-
-    if (workspaceId) {
-      response.cookies.set({
-        name: WORKSPACE_COOKIE_NAME,
-        value: String(workspaceId),
-        ...buildWorkspaceCookieOptions(),
-      });
-    }
-
-    return response;
   } catch (error) {
-    logRouteError("/api/login", error);
-
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      return NextResponse.json(
-        {
-          error: "Database error during login",
-          prismaCode: error.code,
-          prismaMessage: error.message,
-          prismaMeta: error.meta ?? null,
-        },
-        { status: 500 }
-      );
-    }
-
-    const details = error instanceof Error ? error.message : String(error);
-    logLoginDebug("Login request failed", { details });
-
-    return NextResponse.json(
-      {
-        error: "We could not log you in right now. Please try again.",
-        details,
+    return createAuthServerErrorResponse("/api/login", error, {
+      message: "We could not log you in right now. Please try again.",
+      metadata: {
+        email,
       },
-      { status: 500 }
-    );
+    });
   }
 }

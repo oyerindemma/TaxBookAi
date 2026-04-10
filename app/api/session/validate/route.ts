@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { createAuthJsonResponse } from "@/lib/auth-api";
 import { getSessionFromCookies } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -7,7 +7,7 @@ export async function GET() {
   const session = await getSessionFromCookies();
 
   if (!session) {
-    return NextResponse.json(
+    return createAuthJsonResponse(
       {
         ok: false,
         user: null,
@@ -16,7 +16,7 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json({
+  return createAuthJsonResponse({
     ok: true,
     user: {
       id: session.user.id,

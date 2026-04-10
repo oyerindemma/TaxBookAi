@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { getAuthContext, requireRoleAtLeast } from "@/lib/auth";
+import {
+  getWorkspaceClientBusinessPortfolio,
+  getWorkspaceClientBusinessPortfolioItem,
+} from "@/lib/accountant-workspace";
 import { logAudit } from "@/lib/audit";
 import {
-  getWorkspaceClientBusiness,
-  listWorkspaceClientBusinesses,
   parseClientBusinessPayload,
   seedDefaultClientBusinessCategories,
 } from "@/lib/accounting-firm";
@@ -24,8 +26,12 @@ export async function GET() {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const clientBusinesses = await listWorkspaceClientBusinesses(ctx.workspaceId);
-  return NextResponse.json({ clientBusinesses });
+  const portfolio = await getWorkspaceClientBusinessPortfolio({
+    workspaceId: ctx.workspaceId,
+    role: auth.context.role,
+  });
+
+  return NextResponse.json(portfolio);
 }
 
 export async function POST(req: Request) {
@@ -86,13 +92,24 @@ export async function POST(req: Request) {
       },
     });
 
-    const hydratedBusiness = await getWorkspaceClientBusiness(
-      ctx.workspaceId,
-      clientBusiness.id
-    );
+    const [hydratedBusiness, portfolio] = await Promise.all([
+      getWorkspaceClientBusinessPortfolioItem({
+        workspaceId: ctx.workspaceId,
+        role: auth.context.role,
+        clientBusinessId: clientBusiness.id,
+      }),
+      getWorkspaceClientBusinessPortfolio({
+        workspaceId: ctx.workspaceId,
+        role: auth.context.role,
+      }),
+    ]);
 
     return NextResponse.json(
-      { clientBusiness: hydratedBusiness ?? clientBusiness },
+      {
+        clientBusiness: hydratedBusiness,
+        workspace: portfolio.workspace,
+        access: portfolio.access,
+      },
       { status: 201 }
     );
   } catch (error) {

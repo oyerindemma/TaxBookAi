@@ -1,11 +1,14 @@
 import "server-only";
 
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
+import { Pool } from "pg";
 import { validateDatabaseEnvironment } from "@/lib/env";
 import { logWarn } from "@/lib/logger";
 
 const globalForPrisma = globalThis as typeof globalThis & {
   prisma?: PrismaClient;
+  prismaPool?: Pool;
 };
 
 const TRANSIENT_PRISMA_ERROR_CODES = new Set([
@@ -27,10 +30,45 @@ const TRANSIENT_PRISMA_ERROR_PATTERNS = [
   /socket hang up/i,
 ];
 
+function createPrismaPool() {
+  const { provider, databaseUrl } = validateDatabaseEnvironment();
+
+  if (provider !== "postgresql") {
+    throw new Error(
+      "This Prisma 7 runtime is configured for PostgreSQL. Set DATABASE_URL to a PostgreSQL connection string."
+    );
+  }
+
+  return new Pool({
+    connectionString: databaseUrl,
+  });
+}
+
+function getPrismaPool() {
+  if (!globalForPrisma.prismaPool) {
+    globalForPrisma.prismaPool = createPrismaPool();
+  }
+
+  return globalForPrisma.prismaPool;
+}
+
 function createPrismaClient() {
-  validateDatabaseEnvironment();
+  const adapter = new PrismaPg(getPrismaPool(), {
+    disposeExternalPool: false,
+    onPoolError(error) {
+      logWarn("prisma", "PostgreSQL pool emitted an error", {
+        errorMessage: error.message,
+      });
+    },
+    onConnectionError(error) {
+      logWarn("prisma", "PostgreSQL connection emitted an error", {
+        errorMessage: error.message,
+      });
+    },
+  });
 
   return new PrismaClient({
+    adapter,
     log: ["error", "warn"],
   });
 }

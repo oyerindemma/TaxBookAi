@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import CookieConsentBanner from "@/app/_components/CookieConsentBanner";
+import TaxBookOfflineRuntime from "@/app/_components/TaxBookOfflineRuntime";
 import { getMarketingSiteUrl } from "@/lib/marketing-metadata";
 import "./globals.css";
 
@@ -47,6 +49,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <TaxBookOfflineRuntime />
+        <CookieConsentBanner />
         {children}
       </body>
     </html>

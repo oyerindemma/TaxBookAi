@@ -1,7 +1,8 @@
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
+import prismaScriptClient from "./create-prisma-client.cjs";
 
-const prisma = new PrismaClient();
+const { createScriptPrismaClient } = prismaScriptClient;
+const { prisma, disconnect } = createScriptPrismaClient();
 
 const DEMO_EMAIL = process.env.TAX_ENGINE_DEMO_EMAIL || "tax-engine-demo@taxbook.app";
 const DEMO_PASSWORD = process.env.TAX_ENGINE_DEMO_PASSWORD || "TaxEngine123!";
@@ -402,5 +403,5 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await disconnect();
   });

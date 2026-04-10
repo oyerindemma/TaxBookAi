@@ -14,51 +14,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  getSafeNextPath,
+  parseAuthActionResponse,
+} from "@/lib/auth-client";
 
 type FieldErrors = Partial<Record<"email" | "password", string>>;
-type LoginResponse = {
-  error?: string;
-  details?: string;
-  fieldErrors?: FieldErrors;
-};
-
-async function parseLoginResponse(res: Response) {
-  const contentType = res.headers.get("content-type") ?? "";
-
-  if (contentType.toLowerCase().includes("application/json")) {
-    try {
-      return {
-        data: (await res.json()) as LoginResponse,
-        fallbackText: null,
-      };
-    } catch {
-      return {
-        data: null,
-        fallbackText: null,
-      };
-    }
-  }
-
-  try {
-    const text = (await res.text()).trim();
-    return {
-      data: null,
-      fallbackText: text || null,
-    };
-  } catch {
-    return {
-      data: null,
-      fallbackText: null,
-    };
-  }
-}
-
-function getSafeNextPath(raw: string | null) {
-  if (!raw) return null;
-  if (!raw.startsWith("/")) return null;
-  if (raw.startsWith("//")) return null;
-  return raw;
-}
 
 export default function LoginForm() {
   const [email, setEmail] = useState("");
@@ -86,7 +47,8 @@ export default function LoginForm() {
         body: JSON.stringify({ email, password }),
       });
 
-      const { data, fallbackText } = await parseLoginResponse(res);
+      const { data, fallbackText } =
+        await parseAuthActionResponse<keyof FieldErrors>(res);
 
       if (!res.ok) {
         setMessage(

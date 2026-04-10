@@ -13,12 +13,12 @@ import { ContactInquiryForm } from "@/components/marketing/contact-inquiry-form"
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { SectionHeading } from "@/components/marketing/section-heading";
 import {
-  COMPANY_DETAILS,
   CONTACT_CHECKLIST,
   CONTACT_EXPECTATIONS,
   CONTACT_PATHS,
   MARKETING_SUBHEADLINE,
 } from "@/components/marketing/site-content";
+import { phoneHref, phoneNumber, supportEmail, supportEmailHref } from "@/lib/config/contact";
 import { buildMarketingMetadata } from "@/lib/marketing-metadata";
 
 export const metadata: Metadata = buildMarketingMetadata({
@@ -58,7 +58,7 @@ export default function ContactPage() {
               size="lg"
               className="border-0 bg-gradient-primary text-white shadow-glow transition hover:opacity-90"
             >
-              <a href={`mailto:${COMPANY_DETAILS.email}?subject=Book%20a%20TaxBook%20Demo`}>
+              <a href={`${supportEmailHref}?subject=Book%20a%20TaxBook%20Demo`}>
                 Book Demo
               </a>
             </Button>
@@ -68,7 +68,7 @@ export default function ContactPage() {
               variant="outline"
               className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
             >
-              <a href={`mailto:${COMPANY_DETAILS.email}?subject=TaxBook%20Sales%20Inquiry`}>
+              <a href={`${supportEmailHref}?subject=TaxBook%20Sales%20Inquiry`}>
                 Email Sales
               </a>
             </Button>
@@ -78,7 +78,7 @@ export default function ContactPage() {
               variant="ghost"
               className="text-white/72 hover:bg-white/10 hover:text-white"
             >
-              <a href={`tel:${COMPANY_DETAILS.phone.replace(/\s+/g, "")}`}>Call Lagos Team</a>
+              <a href={phoneHref}>Call Lagos Team</a>
             </Button>
           </div>
         </div>
@@ -175,11 +175,11 @@ export default function ContactPage() {
       </section>
 
       <section className="mx-auto max-w-6xl px-6 py-16">
-        <Card className="border-white/10 bg-white/5 text-white shadow-glow backdrop-blur-xl">
-          <CardContent className="flex flex-col gap-6 p-8 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-3">
-              <Badge className="rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-white hover:bg-white/5">
-                Prefer to explore first?
+          <Card className="border-white/10 bg-white/5 text-white shadow-glow backdrop-blur-xl">
+            <CardContent className="flex flex-col gap-6 p-8 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-3">
+                <Badge className="rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-white hover:bg-white/5">
+                  Prefer to explore first?
               </Badge>
               <h2 className="text-3xl font-semibold tracking-tight text-white">
                 Start on Starter, review pricing, then come back when you want rollout help.
@@ -190,6 +190,31 @@ export default function ContactPage() {
               </p>
             </div>
             <MarketingCTAGroup compact showContactSales={false} />
+            </CardContent>
+          </Card>
+        </section>
+
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <Card className="border-white/10 bg-white/5 text-white shadow-glow backdrop-blur-xl">
+          <CardHeader>
+            <CardTitle className="text-white">Contact details</CardTitle>
+            <CardDescription className="text-white/60">
+              Reach TaxBook AI directly through the support inbox or by phone.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 text-sm text-white/72 sm:grid-cols-2">
+            <div className="space-y-1">
+              <p className="font-medium text-white">Support email</p>
+              <a href={supportEmailHref} className="break-all transition hover:text-white">
+                {supportEmail}
+              </a>
+            </div>
+            <div className="space-y-1">
+              <p className="font-medium text-white">Phone</p>
+              <a href={phoneHref} className="transition hover:text-white">
+                {phoneNumber}
+              </a>
+            </div>
           </CardContent>
         </Card>
       </section>

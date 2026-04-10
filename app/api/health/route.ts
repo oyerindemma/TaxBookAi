@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAuthContext, requireRoleAtLeast } from "@/lib/auth";
 import { getEnvironmentHealth } from "@/lib/env";
 import { attachTraceId, createRouteLogger } from "@/lib/observability";
 import { prisma } from "@/lib/prisma";
@@ -7,6 +8,22 @@ export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   const logger = createRouteLogger("/api/health", req);
+  const auth = await getAuthContext();
+  if (!auth) {
+    return attachTraceId(
+      NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      logger.traceId
+    );
+  }
+
+  const access = await requireRoleAtLeast(auth.workspaceId, "ADMIN");
+  if (!access.ok) {
+    return attachTraceId(
+      NextResponse.json({ error: access.error }, { status: access.status }),
+      logger.traceId
+    );
+  }
+
   const strict = new URL(req.url).searchParams.get("strict") === "1";
   const environment = getEnvironmentHealth({ strict });
   const startedAt = Date.now();

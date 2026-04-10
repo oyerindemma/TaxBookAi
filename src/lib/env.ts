@@ -220,6 +220,16 @@ export function getInvoiceReminderRuntimeConfig() {
   };
 }
 
+export function getWhatsAppReceiptRuntimeConfig() {
+  return {
+    verifyToken: readEnv("WHATSAPP_RECEIPT_VERIFY_TOKEN") || null,
+    webhookSecret: readEnv("WHATSAPP_RECEIPT_WEBHOOK_SECRET") || null,
+    metaAccessToken:
+      readEnv("WHATSAPP_META_ACCESS_TOKEN") || readEnv("WHATSAPP_RECEIPT_ACCESS_TOKEN") || null,
+    metaApiVersion: readEnv("WHATSAPP_META_API_VERSION") || "v21.0",
+  };
+}
+
 export function getIntegrityAlertRuntimeConfig() {
   return {
     slackWebhookUrl: readEnv("SLACK_WEBHOOK_URL") || null,

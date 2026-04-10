@@ -6,14 +6,36 @@ import {
   COMPANY_DETAILS,
   MARKETING_HEADLINE,
   MARKETING_NAME,
-  MARKETING_NAV_ITEMS,
 } from "@/components/marketing/site-content";
+import { phoneHref, phoneNumber, supportEmail, supportEmailHref } from "@/lib/config/contact";
+
+const PRODUCT_LINKS = [
+  { href: "/#features", label: "AI bookkeeping" },
+  { href: "/#workflow", label: "Transaction workflows" },
+  { href: "/#comparison", label: "VAT/WHT tax engine" },
+  { href: "/#audiences", label: "Accountant workspace" },
+  { href: "/#preview", label: "Product preview" },
+] as const;
+
+const COMPANY_LINKS = [
+  { href: "/features", label: "Features" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/contact", label: "Book Demo" },
+  { href: "/login", label: "Login" },
+] as const;
+
+const LEGAL_LINKS = [
+  { href: "/privacy", label: "Privacy" },
+  { href: "/terms", label: "Terms" },
+  { href: "/cookies", label: "Cookies" },
+  { href: "/dpa", label: "DPA" },
+] as const;
 
 export function PublicFooter() {
   return (
     <footer className="border-t border-white/10 bg-[#070b13]">
       <div className="mx-auto max-w-7xl px-6 py-10">
-        <div className="grid gap-8 lg:grid-cols-[1.2fr_0.7fr_0.8fr_0.8fr]">
+        <div className="grid gap-8 lg:grid-cols-[1.2fr_0.75fr_0.75fr_0.8fr_0.95fr]">
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="flex size-10 items-center justify-center rounded-2xl bg-gradient-primary text-sm font-semibold text-white shadow-glow">
@@ -46,51 +68,58 @@ export function PublicFooter() {
           </div>
 
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-white">Explore</p>
+            <p className="text-sm font-semibold text-white">Product</p>
             <div className="grid gap-2 text-sm text-white/60">
-              {MARKETING_NAV_ITEMS.map((link) => (
+              {PRODUCT_LINKS.map((link) => (
                 <Link key={link.href} href={link.href} className="transition hover:text-white">
                   {link.label}
                 </Link>
               ))}
-              <Link href="/login" className="transition hover:text-white">
-                Login
-              </Link>
             </div>
           </div>
 
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-white">Contact</p>
+            <p className="text-sm font-semibold text-white">Company</p>
             <div className="grid gap-2 text-sm text-white/60">
-              <a
-                href={`mailto:${COMPANY_DETAILS.email}`}
-                className="transition hover:text-white"
-              >
-                {COMPANY_DETAILS.email}
-              </a>
-              <a
-                href={`tel:${COMPANY_DETAILS.phone.replace(/\s+/g, "")}`}
-                className="transition hover:text-white"
-              >
-                {COMPANY_DETAILS.phone}
-              </a>
-              <span>{COMPANY_DETAILS.location}</span>
+              {COMPANY_LINKS.map((link) => (
+                <Link key={link.href} href={link.href} className="transition hover:text-white">
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-white">Legal</p>
+            <div className="grid gap-2 text-sm text-white/60">
+              {LEGAL_LINKS.map((link) => (
+                <Link key={link.href} href={link.href} className="transition hover:text-white">
+                  {link.label}
+                </Link>
+              ))}
             </div>
           </div>
 
           <div className="space-y-4">
             <div className="space-y-3">
-              <p className="text-sm font-semibold text-white">Legal</p>
+              <p className="text-sm font-semibold text-white">Contact</p>
               <div className="grid gap-2 text-sm text-white/60">
-                <Link href="/privacy" className="transition hover:text-white">
-                  Privacy
-                </Link>
-                <Link href="/terms" className="transition hover:text-white">
-                  Terms
-                </Link>
-                <Link href="/contact" className="transition hover:text-white">
-                  Book Demo
-                </Link>
+                <a
+                  href={supportEmailHref}
+                  className="transition hover:text-white"
+                >
+                  {supportEmail}
+                </a>
+                <a
+                  href={phoneHref}
+                  className="transition hover:text-white"
+                >
+                  {phoneNumber}
+                </a>
+                <span>{COMPANY_DETAILS.location}</span>
+                <span className="text-white/45">
+                  Built for Nigerian businesses, finance teams, and accounting firms.
+                </span>
               </div>
             </div>
 

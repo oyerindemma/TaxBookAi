@@ -12,6 +12,10 @@ export type WorkspaceSwitcherOption = {
   id: number;
   name: string;
   role: "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
+  workspaceKind: "STANDARD" | "ACCOUNTANT";
+  onboardingComplete: boolean;
+  clientBusinessCount: number;
+  transactionCount: number;
   membersCount: number;
   invoicesCount: number;
   taxRecordsCount: number;
@@ -60,6 +64,10 @@ export default function WorkspaceSwitcher({
   async function onChange(nextIdRaw: string) {
     const nextId = Number(nextIdRaw);
     if (!Number.isFinite(nextId) || nextId === current) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setError("Reconnect to switch workspace.");
+      return;
+    }
 
     const previousId = current;
     setCurrent(nextId);
@@ -79,7 +87,7 @@ export default function WorkspaceSwitcher({
         return;
       }
 
-      router.refresh();
+      router.replace(data?.redirectTo ?? "/dashboard");
     } catch {
       setCurrent(previousId);
       setError("Network error switching workspace");
@@ -155,7 +163,9 @@ export default function WorkspaceSwitcher({
       >
         {workspaces.map((workspace) => (
           <option key={workspace.id} value={workspace.id}>
-            {workspace.name} ({workspace.role})
+            {workspace.name} ({workspace.role}){workspace.clientBusinessCount > 0
+              ? ` · ${workspace.clientBusinessCount} client${workspace.clientBusinessCount === 1 ? "" : "s"}`
+              : ""}{!workspace.onboardingComplete ? " · setup needed" : ""}
           </option>
         ))}
       </select>
@@ -166,6 +176,18 @@ export default function WorkspaceSwitcher({
             <Badge variant="secondary" className="rounded-full bg-cyan/10 text-cyan">
               {currentWorkspace.role}
             </Badge>
+            {currentWorkspace.workspaceKind === "ACCOUNTANT" ? (
+              <Badge
+                variant="outline"
+                className={
+                  isMobile
+                    ? "rounded-full border-cyan/20 bg-white/5 text-cyan"
+                    : "rounded-full border-cyan/20 bg-white text-cyan"
+                }
+              >
+                Portfolio
+              </Badge>
+            ) : null}
             <Badge
               variant="outline"
               className={
@@ -176,12 +198,26 @@ export default function WorkspaceSwitcher({
             >
               {getPlanLabel(currentWorkspace.plan)}
             </Badge>
+            {!currentWorkspace.onboardingComplete ? (
+              <Badge
+                variant="outline"
+                className={
+                  isMobile
+                    ? "rounded-full border-amber-300/40 bg-white/5 text-amber-200"
+                    : "rounded-full border-amber-200 bg-amber-50 text-amber-900"
+                }
+              >
+                Setup needed
+              </Badge>
+            ) : null}
           </div>
           <p className={secondaryTextClassName}>
             {currentWorkspace.subscriptionLabel} · {currentWorkspace.membersCount} member
             {currentWorkspace.membersCount === 1 ? "" : "s"} ·{" "}
-            {currentWorkspace.invoicesCount} invoices · {currentWorkspace.taxRecordsCount} tax
-            records
+            {currentWorkspace.clientBusinessCount} client
+            {currentWorkspace.clientBusinessCount === 1 ? "" : "s"} ·{" "}
+            {currentWorkspace.transactionCount} transactions · {currentWorkspace.taxRecordsCount}{" "}
+            tax records
           </p>
         </div>
       ) : null}

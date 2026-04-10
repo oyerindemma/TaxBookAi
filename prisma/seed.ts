@@ -1,7 +1,9 @@
-import { PrismaClient, Role } from "@prisma/client";
+import { Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import prismaScriptClient from "./scripts/create-prisma-client.cjs";
 
-const prisma = new PrismaClient();
+const { createScriptPrismaClient } = prismaScriptClient;
+const { prisma, disconnect } = createScriptPrismaClient();
 
 const SEED_USERS = [
   {
@@ -65,5 +67,5 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await disconnect();
   });

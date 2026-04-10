@@ -1,5 +1,7 @@
-import { PrismaClient } from "@prisma/client";
 import { seedBetaDemoAccount } from "../src/lib/demo-account";
+import prismaScriptClient from "../prisma/scripts/create-prisma-client.cjs";
+
+const { createScriptPrismaClient } = prismaScriptClient;
 
 function parseBoolean(value: string | undefined) {
   if (!value) return undefined;
@@ -10,7 +12,7 @@ function parseBoolean(value: string | undefined) {
 }
 
 async function main() {
-  const prisma = new PrismaClient({
+  const { prisma, disconnect } = createScriptPrismaClient({
     log: ["error", "warn"],
   });
 
@@ -47,7 +49,7 @@ async function main() {
     console.log("2. Use POST /api/system/demo/reset?withIssues=true to reseed and persist scan results.");
     console.log("3. Log in with the credentials above and open /dashboard/integrity.");
   } finally {
-    await prisma.$disconnect();
+    await disconnect();
   }
 }
 

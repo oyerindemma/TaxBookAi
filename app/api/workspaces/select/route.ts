@@ -3,6 +3,7 @@ import { getSessionFromCookies, requireRoleAtLeast } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import {
   buildWorkspaceCookieOptions,
+  getUserWorkspaceSummary,
   WORKSPACE_COOKIE_NAME,
 } from "@/lib/workspaces";
 import { logRouteError } from "@/lib/logger";
@@ -33,8 +34,12 @@ export async function POST(req: Request) {
       actorUserId: auth.context.userId,
       action: "WORKSPACE_SELECTED",
     });
+    const workspaceSummary = await getUserWorkspaceSummary(auth.context.userId, parsedId);
 
-    const res = NextResponse.json({ ok: true });
+    const res = NextResponse.json({
+      ok: true,
+      redirectTo: workspaceSummary?.onboardingComplete ? "/dashboard" : "/onboarding",
+    });
     res.cookies.set(
       WORKSPACE_COOKIE_NAME,
       String(parsedId),

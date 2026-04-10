@@ -81,6 +81,25 @@ export async function PUT(req: Request) {
         data: { name: values.businessName },
       });
 
+      if (membership.workspace.onboardingProfile) {
+        await tx.workspaceOnboarding.update({
+          where: {
+            workspaceId: membership.workspaceId,
+          },
+          data: {
+            businessName: values.businessName,
+            businessType: values.businessType,
+            industry: values.industry,
+            country: values.country,
+            state: values.state,
+            taxIdentificationNumber: values.taxIdentificationNumber,
+            defaultCurrency: values.defaultCurrency,
+            fiscalYearStartMonth: values.fiscalYearStartMonth,
+            draftSavedAt: new Date(),
+          },
+        });
+      }
+
       return savedProfile;
     });
 

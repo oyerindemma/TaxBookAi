@@ -1,6 +1,6 @@
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getWorkspaceClientBusinessPortfolio } from "@/lib/accountant-workspace";
 import { requireUser } from "@/lib/auth";
-import { listWorkspaceClientBusinesses } from "@/lib/accounting-firm";
 import { getActiveWorkspaceMembership } from "@/lib/workspaces";
 import ClientBusinessesClient from "./_components/ClientBusinessesClient";
 
@@ -27,16 +27,18 @@ export default async function ClientBusinessesPage() {
     );
   }
 
-  const businesses = await listWorkspaceClientBusinesses(membership.workspaceId);
+  const portfolio = await getWorkspaceClientBusinessPortfolio({
+    workspaceId: membership.workspaceId,
+    workspaceName: membership.workspace.name,
+    role: membership.role,
+  });
 
   return (
     <ClientBusinessesClient
-      role={membership.role}
-      workspaceName={membership.workspace.name}
-      initialBusinesses={businesses}
+      initialPortfolio={portfolio}
       quickLinks={{
-        reviewHref: "/dashboard/bookkeeping/review",
-        taxSummaryHref: "/dashboard/tax-summary",
+        reviewHref: "/dashboard/banking/review",
+        taxSummaryHref: "/dashboard/tax-center",
       }}
     />
   );

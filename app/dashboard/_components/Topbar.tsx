@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
-import { Bell, LogOut, Menu, Search, User } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Bell, Bot, LifeBuoy, LogOut, Menu, Search, Settings, User } from "lucide-react";
 import WorkspaceSwitcher, {
   type WorkspaceSwitcherOption,
 } from "@/app/dashboard/WorkspaceSwitcher";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,9 +22,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
-  dashboardNavItems,
+  getDashboardNavItems,
   isDashboardNavItemActive,
 } from "@/app/dashboard/_components/dashboard-nav";
+import OfflineSyncStatusControl from "@/app/dashboard/_components/OfflineSyncStatusControl";
+import { useOfflineSync } from "@/app/dashboard/_components/OfflineSyncProvider";
+import { supportEmail, supportEmailHref } from "@/lib/config/contact";
 
 type TopbarProps = {
   user: {
@@ -33,9 +37,13 @@ type TopbarProps = {
   workspace: {
     name: string;
     role: "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
+    workspaceKind: "STANDARD" | "ACCOUNTANT";
+    clientBusinessCount: number;
+    onboardingComplete: boolean;
   } | null;
   workspaceOptions: WorkspaceSwitcherOption[];
   activeWorkspaceId: number | null;
+  preferredModuleHrefs?: string[];
 };
 
 function getInitials(name: string) {
@@ -49,15 +57,20 @@ export default function Topbar({
   workspace,
   workspaceOptions,
   activeWorkspaceId,
+  preferredModuleHrefs = [],
 }: TopbarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const navItems = getDashboardNavItems(workspace?.role, preferredModuleHrefs);
+  const { clearPrivateData } = useOfflineSync();
 
   async function handleLogout() {
     if (loggingOut) return;
     setLoggingOut(true);
     try {
+      clearPrivateData();
       await fetch("/api/logout", {
         method: "POST",
         credentials: "include",
@@ -67,9 +80,19 @@ export default function Topbar({
     }
   }
 
+  function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    router.push(
+      query
+        ? `/dashboard/banking?query=${encodeURIComponent(query)}`
+        : "/dashboard/banking"
+    );
+  }
+
   return (
     <header
-      className="fixed inset-x-0 top-0 z-40 flex h-20 items-center gap-4 border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70 md:left-72 md:px-6"
+      className="fixed inset-x-0 top-0 z-40 flex h-20 items-center gap-4 border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-white/72 md:left-72 md:px-6"
       data-print-hide="true"
     >
       <Sheet>
@@ -118,7 +141,7 @@ export default function Topbar({
             <Separator className="bg-white/10" />
             <nav aria-label="Mobile dashboard navigation" className="flex flex-1 flex-col px-3 py-4">
               <ul className="space-y-1">
-                {dashboardNavItems.map((item) => {
+                {navItems.map((item) => {
                   const isActive = isDashboardNavItemActive(pathname, item.href);
 
                   return (
@@ -159,29 +182,117 @@ export default function Topbar({
             <Badge variant="secondary" className="rounded-full bg-cyan/10 text-cyan">
               {workspace.role}
             </Badge>
+            {workspace.workspaceKind === "ACCOUNTANT" ? (
+              <Badge variant="outline" className="rounded-full border-cyan/20 bg-white text-cyan">
+                {workspace.clientBusinessCount} client
+                {workspace.clientBusinessCount === 1 ? "" : "s"}
+              </Badge>
+            ) : null}
+            {!workspace.onboardingComplete ? (
+              <Button asChild variant="outline" size="sm" className="rounded-full">
+                <Link href="/onboarding">Resume setup</Link>
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div className="text-sm text-slate-500">No workspace selected</div>
         )}
       </div>
 
-      <div className="ml-auto hidden items-center gap-3 lg:flex">
-        <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
-          <Search className="size-4" />
-          Search records, invoices, clients
-        </div>
+      <div className="ml-auto hidden min-w-0 items-center gap-3 xl:flex">
+        <form
+          onSubmit={handleSearchSubmit}
+          className="flex min-w-[320px] max-w-[520px] flex-1 items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2 shadow-sm"
+          role="search"
+          aria-label="Workspace search"
+        >
+          <Search className="size-4 shrink-0 text-slate-400" />
+          <Input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search transactions, businesses, or records"
+            className="h-auto border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0"
+          />
+          <Button
+            type="submit"
+            size="sm"
+            variant="ghost"
+            className="rounded-xl px-3 text-slate-600 hover:text-slate-950"
+          >
+            Search
+          </Button>
+        </form>
+        <OfflineSyncStatusControl />
         <Button
+          asChild
+          variant="ghost"
+          className="rounded-2xl border border-slate-200 bg-white px-4 shadow-sm transition hover:border-cyan/30 hover:text-cyan"
+        >
+          <a href={supportEmailHref}>
+            <LifeBuoy className="size-4" />
+            Need help?
+          </a>
+        </Button>
+        <Button asChild variant="ghost" className="rounded-2xl border border-slate-200 bg-white px-4 shadow-sm transition hover:border-cyan/30 hover:text-cyan">
+          <Link href="/dashboard/assistant">
+            <Bot className="size-4" />
+            Assistant
+          </Link>
+        </Button>
+        <Button
+          asChild
           type="button"
           variant="ghost"
           size="icon"
-          className="rounded-2xl border border-cyan/20 bg-white shadow-sm transition hover:border-cyan/40 hover:text-cyan"
+          className="rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-cyan/30 hover:text-cyan"
           aria-label="Notifications"
         >
-          <Bell className="size-4 text-slate-600" />
+          <Link href="/dashboard/notifications">
+            <Bell className="size-4 text-slate-600" />
+          </Link>
         </Button>
       </div>
 
       <div className="flex items-center gap-3">
+        <div className="lg:hidden">
+          <OfflineSyncStatusControl />
+        </div>
+        <Button
+          asChild
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-cyan/30 hover:text-cyan xl:hidden"
+          aria-label={`Email ${supportEmail}`}
+        >
+          <a href={supportEmailHref}>
+            <LifeBuoy className="size-4 text-slate-600" />
+          </a>
+        </Button>
+        <Button
+          asChild
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-cyan/30 hover:text-cyan xl:hidden"
+          aria-label="Open assistant"
+        >
+          <Link href="/dashboard/assistant">
+            <Bot className="size-4 text-slate-600" />
+          </Link>
+        </Button>
+        <Button
+          asChild
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-cyan/30 hover:text-cyan xl:hidden"
+          aria-label="Notifications"
+        >
+          <Link href="/dashboard/notifications">
+            <Bell className="size-4 text-slate-600" />
+          </Link>
+        </Button>
         <div className="hidden md:block">
           <WorkspaceSwitcher
             initialWorkspaces={workspaceOptions}
@@ -217,6 +328,18 @@ export default function Topbar({
                 <User className="size-4" />
                 Profile
               </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/settings">
+                <Settings className="size-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <a href={supportEmailHref}>
+                <LifeBuoy className="size-4" />
+                Need help?
+              </a>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

@@ -1,11 +1,17 @@
 import "server-only";
 
-import type { Prisma, SubscriptionPlan } from "@prisma/client";
+import { Prisma, type SubscriptionPlan } from "@prisma/client";
 import { cookies } from "next/headers";
+import { resolveAccountantWorkspaceKind } from "@/lib/accountant-workspace-types";
 import { getOptionalSessionCookieDomain } from "@/lib/env";
 import { formatSubscriptionStatus } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
+import { isPrismaSchemaCompatibilityError } from "@/lib/prisma-schema-compat";
 import { SESSION_MAX_AGE_SECONDS } from "@/lib/session-constants";
+import {
+  buildWorkspaceOnboardingDashboardConfig,
+  buildWorkspaceOnboardingSnapshot,
+} from "@/lib/workspace-onboarding";
 
 export const WORKSPACE_COOKIE_NAME = "tb_workspace";
 
@@ -33,18 +39,72 @@ type WorkspaceMembershipWithDetails = Prisma.WorkspaceMemberGetPayload<{
     workspace: {
       include: {
         businessProfile: true;
+        onboardingProfile: true;
         subscription: true;
+        clientBusinesses: {
+          select: {
+            archivedAt: true;
+          };
+        };
         _count: {
           select: {
             members: true;
             invoices: true;
             taxRecords: true;
+            bankTransactions: true;
           };
         };
       };
     };
   };
 }>;
+
+type WorkspaceMembershipWithDetailsWithoutOnboarding =
+  Prisma.WorkspaceMemberGetPayload<{
+    include: {
+      workspace: {
+        include: {
+          businessProfile: true;
+          subscription: true;
+          clientBusinesses: {
+            select: {
+              archivedAt: true;
+            };
+          };
+          _count: {
+            select: {
+              members: true;
+              invoices: true;
+              taxRecords: true;
+              bankTransactions: true;
+            };
+          };
+        };
+      };
+    };
+  }>;
+
+type ActiveWorkspaceMembership = Prisma.WorkspaceMemberGetPayload<{
+  include: {
+    workspace: {
+      include: {
+        businessProfile: true;
+        onboardingProfile: true;
+      };
+    };
+  };
+}>;
+
+type ActiveWorkspaceMembershipWithoutOnboarding =
+  Prisma.WorkspaceMemberGetPayload<{
+    include: {
+      workspace: {
+        include: {
+          businessProfile: true;
+        };
+      };
+    };
+  }>;
 
 export type UserWorkspaceSummary = {
   id: number;
@@ -57,6 +117,9 @@ export type UserWorkspaceSummary = {
   membersCount: number;
   invoicesCount: number;
   taxRecordsCount: number;
+  clientBusinessCount: number;
+  workspaceKind: "STANDARD" | "ACCOUNTANT";
+  transactionCount: number;
   plan: SubscriptionPlan | null;
   subscriptionLabel: string;
 };
@@ -69,11 +132,53 @@ export type WorkspaceShellSummary = Pick<
   | "membersCount"
   | "invoicesCount"
   | "taxRecordsCount"
+  | "clientBusinessCount"
+  | "workspaceKind"
+  | "transactionCount"
   | "plan"
   | "subscriptionLabel"
+  | "onboardingComplete"
 >;
 
+function isMissingWorkspaceOnboardingTableError(error: unknown) {
+  return isPrismaSchemaCompatibilityError(error, {
+    tables: ["WorkspaceOnboarding"],
+  });
+}
+
+function withNullOnboardingProfile(
+  membership: WorkspaceMembershipWithDetailsWithoutOnboarding
+): WorkspaceMembershipWithDetails {
+  return {
+    ...membership,
+    workspace: {
+      ...membership.workspace,
+      onboardingProfile: null,
+    },
+  };
+}
+
+function withNullActiveWorkspaceOnboardingProfile(
+  membership: ActiveWorkspaceMembershipWithoutOnboarding
+): ActiveWorkspaceMembership {
+  return {
+    ...membership,
+    workspace: {
+      ...membership.workspace,
+      onboardingProfile: null,
+    },
+  };
+}
+
 function mapWorkspaceSummary(membership: WorkspaceMembershipWithDetails): UserWorkspaceSummary {
+  const clientBusinessCount = membership.workspace.clientBusinesses.filter(
+    (clientBusiness) => !clientBusiness.archivedAt
+  ).length;
+  const onboardingComplete = Boolean(
+    membership.workspace.onboardingProfile?.completedAt ||
+      membership.workspace.businessProfile?.onboardingCompletedAt
+  );
+
   return {
     id: membership.workspaceId,
     name: membership.workspace.name,
@@ -81,12 +186,13 @@ function mapWorkspaceSummary(membership: WorkspaceMembershipWithDetails): UserWo
     archivedAt: membership.workspace.archivedAt,
     createdAt: membership.workspace.createdAt,
     businessName: membership.workspace.businessProfile?.businessName ?? null,
-    onboardingComplete: Boolean(
-      membership.workspace.businessProfile?.onboardingCompletedAt
-    ),
+    onboardingComplete,
     membersCount: membership.workspace._count.members,
     invoicesCount: membership.workspace._count.invoices,
     taxRecordsCount: membership.workspace._count.taxRecords,
+    clientBusinessCount,
+    workspaceKind: resolveAccountantWorkspaceKind(clientBusinessCount),
+    transactionCount: membership.workspace._count.bankTransactions,
     plan: membership.workspace.subscription?.plan ?? null,
     subscriptionLabel: formatSubscriptionStatus(membership.workspace.subscription),
   };
@@ -106,25 +212,68 @@ export async function listWorkspaceMemberships(userId: number) {
 }
 
 export async function listUserWorkspaceSummaries(userId: number) {
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId },
-    include: {
-      workspace: {
-        include: {
-          businessProfile: true,
-          subscription: true,
-          _count: {
-            select: {
-              members: true,
-              invoices: true,
-              taxRecords: true,
+  let memberships: WorkspaceMembershipWithDetails[];
+
+  try {
+    memberships = await prisma.workspaceMember.findMany({
+      where: { userId },
+      include: {
+        workspace: {
+          include: {
+            businessProfile: true,
+            onboardingProfile: true,
+            subscription: true,
+            clientBusinesses: {
+              select: {
+                archivedAt: true,
+              },
+            },
+            _count: {
+              select: {
+                members: true,
+                invoices: true,
+                taxRecords: true,
+                bankTransactions: true,
+              },
             },
           },
         },
       },
-    },
-    orderBy: { workspace: { name: "asc" } },
-  });
+      orderBy: { workspace: { name: "asc" } },
+    });
+  } catch (error) {
+    if (!isMissingWorkspaceOnboardingTableError(error)) {
+      throw error;
+    }
+
+    const fallbackMemberships = await prisma.workspaceMember.findMany({
+      where: { userId },
+      include: {
+        workspace: {
+          include: {
+            businessProfile: true,
+            subscription: true,
+            clientBusinesses: {
+              select: {
+                archivedAt: true,
+              },
+            },
+            _count: {
+              select: {
+                members: true,
+                invoices: true,
+                taxRecords: true,
+                bankTransactions: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { workspace: { name: "asc" } },
+    });
+
+    memberships = fallbackMemberships.map(withNullOnboardingProfile);
+  }
 
   return memberships
     .map((membership) => mapWorkspaceSummary(membership))
@@ -137,34 +286,97 @@ export async function listUserWorkspaceSummaries(userId: number) {
 }
 
 export async function getUserWorkspaceSummary(userId: number, workspaceId: number) {
-  const membership = await prisma.workspaceMember.findFirst({
-    where: { userId, workspaceId },
-    include: {
-      workspace: {
-        include: {
-          businessProfile: true,
-          subscription: true,
-          _count: {
-            select: {
-              members: true,
-              invoices: true,
-              taxRecords: true,
+  let membership: WorkspaceMembershipWithDetails | null;
+
+  try {
+    membership = await prisma.workspaceMember.findFirst({
+      where: { userId, workspaceId },
+      include: {
+        workspace: {
+          include: {
+            businessProfile: true,
+            onboardingProfile: true,
+            subscription: true,
+            clientBusinesses: {
+              select: {
+                archivedAt: true,
+              },
+            },
+            _count: {
+              select: {
+                members: true,
+                invoices: true,
+                taxRecords: true,
+                bankTransactions: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
+  } catch (error) {
+    if (!isMissingWorkspaceOnboardingTableError(error)) {
+      throw error;
+    }
+
+    const fallbackMembership = await prisma.workspaceMember.findFirst({
+      where: { userId, workspaceId },
+      include: {
+        workspace: {
+          include: {
+            businessProfile: true,
+            subscription: true,
+            clientBusinesses: {
+              select: {
+                archivedAt: true,
+              },
+            },
+            _count: {
+              select: {
+                members: true,
+                invoices: true,
+                taxRecords: true,
+                bankTransactions: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    membership = fallbackMembership
+      ? withNullOnboardingProfile(fallbackMembership)
+      : null;
+  }
 
   if (!membership) return null;
   return mapWorkspaceSummary(membership);
 }
 
 export async function getWorkspaceShellState(userId: number) {
-  const [activeMembership, workspaceSummaries] = await Promise.all([
+  const [activeMembershipResult, workspaceSummariesResult] = await Promise.allSettled([
     getActiveWorkspaceMembership(userId),
     listUserWorkspaceSummaries(userId),
   ]);
+
+  if (activeMembershipResult.status === "rejected") {
+    console.error(
+      "[TaxBook:workspaces] Failed to load active workspace membership",
+      activeMembershipResult.reason
+    );
+  }
+
+  if (workspaceSummariesResult.status === "rejected") {
+    console.error(
+      "[TaxBook:workspaces] Failed to load user workspace summaries",
+      workspaceSummariesResult.reason
+    );
+  }
+
+  const activeMembership =
+    activeMembershipResult.status === "fulfilled" ? activeMembershipResult.value : null;
+  const workspaceSummaries =
+    workspaceSummariesResult.status === "fulfilled" ? workspaceSummariesResult.value : [];
 
   const workspaces = workspaceSummaries
     .filter((workspace) => !workspace.archivedAt)
@@ -175,14 +387,30 @@ export async function getWorkspaceShellState(userId: number) {
       membersCount: workspace.membersCount,
       invoicesCount: workspace.invoicesCount,
       taxRecordsCount: workspace.taxRecordsCount,
+      clientBusinessCount: workspace.clientBusinessCount,
+      workspaceKind: workspace.workspaceKind,
+      transactionCount: workspace.transactionCount,
       plan: workspace.plan,
       subscriptionLabel: workspace.subscriptionLabel,
+      onboardingComplete: workspace.onboardingComplete,
     })) satisfies WorkspaceShellSummary[];
+  const activeOnboardingConfig =
+    activeMembership?.workspace
+      ? buildWorkspaceOnboardingDashboardConfig({
+          workspaceName: activeMembership.workspace.name,
+          values: buildWorkspaceOnboardingSnapshot({
+            workspaceName: activeMembership.workspace.name,
+            onboarding: activeMembership.workspace.onboardingProfile,
+            businessProfile: activeMembership.workspace.businessProfile,
+          }).values,
+        })
+      : null;
 
   return {
     activeMembership,
     activeWorkspaceId: activeMembership?.workspaceId ?? null,
     workspaces,
+    activeOnboardingConfig,
   };
 }
 
@@ -211,10 +439,82 @@ export async function getActiveWorkspaceMembership(userId: number) {
   const workspaceId = raw ? Number(raw) : NaN;
 
   if (Number.isFinite(workspaceId) && Number.isInteger(workspaceId)) {
+    let membership: ActiveWorkspaceMembership | null;
+
+    try {
+      membership = await prisma.workspaceMember.findFirst({
+        where: {
+          userId,
+          workspaceId,
+          workspace: {
+            archivedAt: null,
+          },
+        },
+        include: {
+          workspace: {
+            include: {
+              businessProfile: true,
+              onboardingProfile: true,
+            },
+          },
+        },
+      });
+    } catch (error) {
+      if (!isMissingWorkspaceOnboardingTableError(error)) {
+        throw error;
+      }
+
+      const fallbackMembership = await prisma.workspaceMember.findFirst({
+        where: {
+          userId,
+          workspaceId,
+          workspace: {
+            archivedAt: null,
+          },
+        },
+        include: {
+          workspace: {
+            include: {
+              businessProfile: true,
+            },
+          },
+        },
+      });
+
+      membership = fallbackMembership
+        ? withNullActiveWorkspaceOnboardingProfile(fallbackMembership)
+        : null;
+    }
+
+    if (membership) return membership;
+  }
+
+  try {
+    return await prisma.workspaceMember.findFirst({
+      where: {
+        userId,
+        workspace: {
+          archivedAt: null,
+        },
+      },
+      include: {
+        workspace: {
+          include: {
+            businessProfile: true,
+            onboardingProfile: true,
+          },
+        },
+      },
+      orderBy: { workspace: { name: "asc" } },
+    });
+  } catch (error) {
+    if (!isMissingWorkspaceOnboardingTableError(error)) {
+      throw error;
+    }
+
     const membership = await prisma.workspaceMember.findFirst({
       where: {
         userId,
-        workspaceId,
         workspace: {
           archivedAt: null,
         },
@@ -226,32 +526,22 @@ export async function getActiveWorkspaceMembership(userId: number) {
           },
         },
       },
+      orderBy: { workspace: { name: "asc" } },
     });
-    if (membership) return membership;
-  }
 
-  return prisma.workspaceMember.findFirst({
-    where: {
-      userId,
-      workspace: {
-        archivedAt: null,
-      },
-    },
-    include: {
-      workspace: {
-        include: {
-          businessProfile: true,
-        },
-      },
-    },
-    orderBy: { workspace: { name: "asc" } },
-  });
+    return membership
+      ? withNullActiveWorkspaceOnboardingProfile(membership)
+      : null;
+  }
 }
 
 export function isWorkspaceOnboardingComplete(
   membership: Awaited<ReturnType<typeof getActiveWorkspaceMembership>>
 ) {
-  return Boolean(membership?.workspace.businessProfile?.onboardingCompletedAt);
+  return Boolean(
+    membership?.workspace.onboardingProfile?.completedAt ||
+      membership?.workspace.businessProfile?.onboardingCompletedAt
+  );
 }
 
 export async function getAuthenticatedWorkspaceRedirectPath(userId: number) {

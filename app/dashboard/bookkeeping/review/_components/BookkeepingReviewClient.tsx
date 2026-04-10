@@ -98,6 +98,7 @@ type ReviewUpload = {
   fileName: string;
   fileType: string | null;
   sourceType: string;
+  ingestionChannel: "DIRECT_UPLOAD" | "WHATSAPP";
   documentType: "RECEIPT" | "INVOICE" | "CREDIT_NOTE" | "UNKNOWN";
   status:
     | "UPLOADED"
@@ -148,6 +149,15 @@ type ReviewUpload = {
     createdAt: string;
     status: string;
     clientBusinessName: string;
+  } | null;
+  whatsAppReceiptMessage: {
+    id: number;
+    provider: "GENERIC_WEBHOOK" | "META_CLOUD_API";
+    senderPhoneNumber: string;
+    senderName: string | null;
+    connectionLabel: string;
+    receivedAt: string;
+    externalMessageId: string;
   } | null;
   clientBusiness: {
     id: number;
@@ -1104,6 +1114,7 @@ export default function BookkeepingReviewClient({
                     }`}
                   >
                     {upload.clientBusiness.name} · {upload.documentType.replace(/_/g, " ")}
+                    {upload.ingestionChannel === "WHATSAPP" ? " · WhatsApp" : ""}
                   </div>
                   <div
                     className={`mt-1 text-xs ${
@@ -1140,6 +1151,9 @@ export default function BookkeepingReviewClient({
                         <Badge variant="outline">
                           {selectedUpload.documentType.replace(/_/g, " ")}
                         </Badge>
+                        {selectedUpload.ingestionChannel === "WHATSAPP" ? (
+                          <Badge variant="outline">WhatsApp capture</Badge>
+                        ) : null}
                         {selectedUpload.assistant.provider ? (
                           <Badge variant="outline">
                             {selectedUpload.assistant.provider === "openai"
@@ -1153,9 +1167,13 @@ export default function BookkeepingReviewClient({
                       <CardDescription>
                         {selectedUpload.clientBusiness.name}
                         {" · "}
-                        {selectedUpload.uploadedByName ||
-                          selectedUpload.uploadedByEmail ||
-                          "Unknown uploader"}
+                        {selectedUpload.ingestionChannel === "WHATSAPP"
+                          ? selectedUpload.whatsAppReceiptMessage?.senderName ||
+                            selectedUpload.whatsAppReceiptMessage?.senderPhoneNumber ||
+                            "WhatsApp sender"
+                          : selectedUpload.uploadedByName ||
+                            selectedUpload.uploadedByEmail ||
+                            "Unknown uploader"}
                         {" · "}
                         {selectedUpload.extractedAt
                           ? `Extracted ${new Date(selectedUpload.extractedAt).toLocaleString()}`
@@ -1182,6 +1200,25 @@ export default function BookkeepingReviewClient({
                         Similar upload: {selectedUpload.duplicateOfUpload.fileName} from{" "}
                         {selectedUpload.duplicateOfUpload.clientBusinessName} on{" "}
                         {new Date(selectedUpload.duplicateOfUpload.createdAt).toLocaleString()}.
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {selectedUpload.whatsAppReceiptMessage ? (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+                      <p className="font-medium">Captured from WhatsApp</p>
+                      <p className="mt-1">
+                        {selectedUpload.whatsAppReceiptMessage.connectionLabel}
+                        {" · "}
+                        {selectedUpload.whatsAppReceiptMessage.senderName ||
+                          selectedUpload.whatsAppReceiptMessage.senderPhoneNumber}
+                      </p>
+                      <p className="mt-1 text-emerald-900">
+                        Message received{" "}
+                        {new Date(
+                          selectedUpload.whatsAppReceiptMessage.receivedAt
+                        ).toLocaleString()}
+                        .
                       </p>
                     </div>
                   ) : null}
