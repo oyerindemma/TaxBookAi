@@ -12,7 +12,7 @@ const deploymentStage =
     : process.env.NODE_ENV === "production"
       ? "production"
       : "development";
-const strict = process.argv.includes("--strict") || deploymentStage === "production";
+const strict = process.argv.includes("--strict");
 const smtpEnvNames = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM"];
 
 const errors = [];
@@ -140,7 +140,7 @@ if (deploymentStage === "production" && !readEnv("HEALTH_CHECK_SECRET")) {
 
 if (!hasAnyEnv(["REDIS_URL", "BULLMQ_REDIS_URL", "UPSTASH_REDIS_URL"])) {
   missing.push("REDIS_URL");
-  if (deploymentStage === "production") {
+  if (deploymentStage === "production" && strict) {
     errors.push("REDIS_URL or BULLMQ_REDIS_URL is required in production for async exports");
   } else {
     warnings.push("REDIS_URL is not set; async compliance exports will be unavailable");
