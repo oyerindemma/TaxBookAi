@@ -1,46 +1,26 @@
-# TaxBook AI Webapp
+# Tax Bookkeeping Application
 
-TaxBook AI is a Nigeria-first accounting SaaS for businesses, finance teams, and accounting firms. The private app already includes workspace management, invoicing, AI bookkeeping capture, bank reconciliation, tax summaries, billing, and accountant review workflows.
+## Overview
+This repository hosts an enterprise-grade tax bookkeeping platform for Nigeria. The product is designed to make income recording, expense tracking, and tax compliance simple and trustworthy for individuals, SMEs, and informal-sector businesses, while meeting rigorous security, privacy, and auditability expectations.
 
-## Local Development
+We use UK spelling and terminology throughout documentation and UI copy.
 
-1. Copy `.env.example` to `.env`
-2. Keep local development on SQLite unless you are explicitly testing Postgres or Neon
-3. Run:
+## Status
+- Repository initialised and documentation scaffolded.
+- Requirements discovery and architecture definition underway.
+- Compliance, security, and accessibility baselines defined.
 
-```bash
-npm install
-npm run env:check
-npm run prisma:generate:local
-npm run dev
-```
+## Documentation
+- `docs/README.md` Documentation index
+- `docs/vision.md` Product vision and principles
+- `docs/product-requirements.md` Functional scope and MVP definition
+- `docs/security-compliance.md` Security, privacy, and regulatory baselines
+- `docs/architecture.md` Architecture overview and design decisions
+- `docs/roadmap.md` Delivery roadmap and milestones
+- `docs/design-system.md` Visual design direction and UI standards
+- `docs/research.md` Research notes and sources
 
-Useful commands:
-
-```bash
-npm run lint
-npm run build
-npm run health:check
-npm run prisma:migrate:status:local
-npm run prisma:migrate:deploy
-```
-
-## Production Deployment
-
-Production deployment guidance lives in [docs/production-deployment.md](./docs/production-deployment.md).
-
-This repository's Next.js App Router app lives in `webapp/`. In Vercel, set the project Root Directory to `webapp` so the deployed project includes `app/page.tsx` and the homepage resolves at `/`.
-
-That runbook covers:
-
-- Vercel environment variables by environment
-- Neon pooled vs direct connection strings
-- Prisma migration flow for SQLite and Postgres
-- Paystack webhook setup and hardening
-- Production smoke tests after deploy
-
-## Notes
-
-- Local billing stub mode is allowed only outside production.
-- Production health checks are available at `/api/health?strict=1`.
-- If Paystack keys were ever shared in sample env files, rotate them before go-live.
+## Next Steps
+- Extract granular requirements and user journeys from the vision document.
+- Validate MVP scope and success metrics.
+- Establish CI/CD and deployment pipelines.
