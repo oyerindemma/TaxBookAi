@@ -92,7 +92,7 @@ export default function Topbar({
 
   return (
     <header
-      className="fixed inset-x-0 top-0 z-40 flex h-20 items-center gap-4 border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-white/72 md:left-72 md:px-6"
+      className="fixed inset-x-0 top-0 z-40 flex min-h-16 items-center gap-2 border-b border-slate-200/80 bg-white/90 px-3 py-2 shadow-[0_10px_34px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/76 sm:gap-3 sm:px-4 md:left-72 md:h-20 md:px-6 md:py-0"
       data-print-hide="true"
     >
       <Sheet>
@@ -101,13 +101,13 @@ export default function Topbar({
             type="button"
             variant="ghost"
             size="icon"
-            className="rounded-2xl border border-cyan/20 bg-white shadow-sm transition hover:border-cyan/40 hover:text-cyan md:hidden"
+            className="size-10 rounded-2xl border border-cyan/20 bg-white shadow-sm transition hover:border-cyan/40 hover:text-cyan md:hidden"
             aria-label="Open navigation"
           >
             <Menu className="size-5" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-72 border-cyan/20 bg-primary p-0 text-white">
+        <SheetContent side="left" className="w-[min(86vw,18rem)] border-cyan/20 bg-primary p-0 text-white">
           <div className="flex h-full flex-col">
             <div className="px-6 py-5">
               <div className="flex items-center gap-3">
@@ -172,24 +172,24 @@ export default function Topbar({
         </SheetContent>
       </Sheet>
 
-      <div className="grid gap-1">
-        <div className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+      <div className="grid min-w-0 flex-1 gap-0.5 md:flex-none md:gap-1">
+        <div className="hidden text-xs font-medium uppercase tracking-[0.2em] text-slate-400 sm:block">
           Dashboard
         </div>
         {workspace ? (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium text-slate-950">{workspace.name}</span>
-            <Badge variant="secondary" className="rounded-full bg-cyan/10 text-cyan">
+          <div className="flex min-w-0 items-center gap-2 text-sm sm:flex-wrap">
+            <span className="min-w-0 truncate font-medium text-slate-950">{workspace.name}</span>
+            <Badge variant="secondary" className="hidden rounded-full bg-cyan/10 text-cyan sm:inline-flex">
               {workspace.role}
             </Badge>
             {workspace.workspaceKind === "ACCOUNTANT" ? (
-              <Badge variant="outline" className="rounded-full border-cyan/20 bg-white text-cyan">
+              <Badge variant="outline" className="hidden rounded-full border-cyan/20 bg-white text-cyan lg:inline-flex">
                 {workspace.clientBusinessCount} client
                 {workspace.clientBusinessCount === 1 ? "" : "s"}
               </Badge>
             ) : null}
             {!workspace.onboardingComplete ? (
-              <Button asChild variant="outline" size="sm" className="rounded-full">
+              <Button asChild variant="outline" size="sm" className="hidden rounded-full sm:inline-flex">
                 <Link href="/onboarding">Resume setup</Link>
               </Button>
             ) : null}
@@ -253,8 +253,8 @@ export default function Topbar({
         </Button>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="lg:hidden">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2 lg:gap-3">
+        <div className="hidden lg:hidden sm:block">
           <OfflineSyncStatusControl />
         </div>
         <Button
@@ -262,7 +262,7 @@ export default function Topbar({
           type="button"
           variant="ghost"
           size="icon"
-          className="rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-cyan/30 hover:text-cyan xl:hidden"
+          className="hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-cyan/30 hover:text-cyan sm:inline-flex xl:hidden"
           aria-label={`Email ${supportEmail}`}
         >
           <a href={supportEmailHref}>
@@ -274,7 +274,7 @@ export default function Topbar({
           type="button"
           variant="ghost"
           size="icon"
-          className="rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-cyan/30 hover:text-cyan xl:hidden"
+          className="hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-cyan/30 hover:text-cyan sm:inline-flex xl:hidden"
           aria-label="Open assistant"
         >
           <Link href="/dashboard/assistant">
@@ -305,7 +305,7 @@ export default function Topbar({
               type="button"
               variant="ghost"
               aria-label="Open account menu"
-              className="flex items-center gap-2 rounded-2xl border border-cyan/20 bg-white px-2.5 shadow-sm transition hover:border-cyan/40"
+              className="flex items-center gap-2 rounded-2xl border border-cyan/20 bg-white px-2 shadow-sm transition hover:border-cyan/40 sm:px-2.5"
             >
               <Avatar size="sm">
                 <AvatarFallback>{getInitials(user.fullName)}</AvatarFallback>

@@ -47,7 +47,7 @@ export default async function DashboardLayout({
         />
         <main className="relative min-h-screen pt-24 md:pl-72">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[linear-gradient(180deg,rgba(255,255,255,0.78)_0%,rgba(255,255,255,0)_100%)]" />
-          <div className="relative mx-auto w-full max-w-[1520px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="relative mx-auto w-full max-w-[1520px] px-3 py-5 sm:px-6 lg:px-8 lg:py-8">
             {children}
           </div>
         </main>
