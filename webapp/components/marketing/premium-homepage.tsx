@@ -415,7 +415,10 @@ function SectionShell({
   children: ReactNode;
 }) {
   return (
-    <section id={id} className={cn("relative mx-auto max-w-7xl px-6 py-16 sm:py-20", className)}>
+    <section
+      id={id}
+      className={cn("relative mx-auto w-full max-w-7xl overflow-hidden px-4 py-14 sm:px-6 sm:py-20", className)}
+    >
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-cyan/24 to-transparent"
@@ -427,14 +430,14 @@ function SectionShell({
 
 function HeroVisualPanel() {
   return (
-    <div className="relative mx-auto w-full max-w-[44rem]">
+    <div className="relative mx-auto w-full max-w-[44rem] min-w-0 overflow-hidden">
       <div
         aria-hidden
         className="absolute inset-x-10 -top-12 h-36 rounded-full bg-cyan/18 blur-3xl"
       />
       <div className={cn(PANEL_CLASSNAME, "relative overflow-hidden p-3 sm:p-4")}>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.2),transparent_26%),radial-gradient(circle_at_bottom_left,rgba(34,211,238,0.16),transparent_34%)]" />
-        <div className="relative grid gap-3 lg:grid-cols-[88px_minmax(0,1fr)]">
+        <div className="relative grid min-w-0 gap-3 lg:grid-cols-[88px_minmax(0,1fr)]">
           <div className="hidden rounded-[24px] border border-white/10 bg-white/[0.04] p-3 lg:flex lg:flex-col lg:justify-between">
             <div className="space-y-4">
               <div className="flex size-10 items-center justify-center rounded-2xl bg-gradient-primary text-sm font-semibold text-white shadow-glow">
@@ -461,16 +464,16 @@ function HeroVisualPanel() {
             </div>
           </div>
 
-          <div className="rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(9,17,30,0.96),rgba(7,13,24,0.92))] p-4 sm:p-5">
+          <div className="min-w-0 rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(9,17,30,0.96),rgba(7,13,24,0.92))] p-3 sm:rounded-[26px] sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <p className="text-sm font-semibold text-white">TaxBook AI Workspace</p>
                   <Badge className="rounded-full border border-cyan/20 bg-cyan/10 px-2.5 py-0.5 text-[11px] text-cyan hover:bg-cyan/10">
                     Nigeria-first
                   </Badge>
                 </div>
-                <p className="mt-1 text-sm text-white/45">
+                <p className="mt-1 max-w-full text-sm leading-6 text-white/45">
                   Transaction review, tax center, and filing readiness in one control plane
                 </p>
               </div>
@@ -501,12 +504,12 @@ function HeroVisualPanel() {
               ))}
             </div>
 
-            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+            <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
               <div className={cn(INNER_PANEL_CLASSNAME, "p-4")}>
-                <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
-                  <div>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold text-white">Transaction review queue</p>
-                    <p className="text-sm text-white/45">
+                    <p className="text-sm leading-6 text-white/45">
                       Imported activity ready for approval and posting checks
                     </p>
                   </div>
@@ -516,7 +519,7 @@ function HeroVisualPanel() {
                 </div>
 
                 <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-                  <div className="grid grid-cols-[1.1fr_0.8fr_0.65fr_0.55fr] gap-3 border-b border-white/10 px-4 py-3 text-[11px] uppercase tracking-[0.2em] text-white/34">
+                  <div className="hidden grid-cols-[minmax(8rem,1fr)_minmax(6.5rem,0.8fr)_minmax(6rem,0.65fr)_minmax(5rem,0.55fr)] gap-3 border-b border-white/10 px-4 py-3 text-[11px] uppercase tracking-[0.2em] text-white/34 sm:grid">
                     <span>Merchant</span>
                     <span>Status</span>
                     <span>Category</span>
@@ -530,13 +533,13 @@ function HeroVisualPanel() {
                   ].map(([merchant, status, category, confidence]) => (
                     <div
                       key={merchant}
-                      className="grid grid-cols-[1.1fr_0.8fr_0.65fr_0.55fr] gap-3 border-b border-white/8 px-4 py-3 text-sm last:border-b-0"
+                      className="grid grid-cols-1 gap-3 border-b border-white/8 px-4 py-3 text-sm last:border-b-0 sm:grid-cols-[minmax(8rem,1fr)_minmax(6.5rem,0.8fr)_minmax(6rem,0.65fr)_minmax(5rem,0.55fr)]"
                     >
-                      <div>
-                        <p className="font-medium text-white">{merchant}</p>
+                      <div className="min-w-0">
+                        <p className="font-medium leading-6 text-white">{merchant}</p>
                         <p className="text-xs text-white/40">Workspace scoped</p>
                       </div>
-                      <div className="pt-0.5">
+                      <div className="pt-0.5 sm:pt-0.5">
                         <span
                           className={cn(
                             "rounded-full border px-2.5 py-1 text-[11px]",
@@ -552,8 +555,10 @@ function HeroVisualPanel() {
                           {status}
                         </span>
                       </div>
-                      <div className="pt-1 text-white/62">{category}</div>
-                      <div className="pt-1 text-right font-medium text-white">{confidence}</div>
+                      <div className="text-sm text-white/62 sm:pt-1">{category}</div>
+                      <div className="text-sm font-medium text-white sm:pt-1 sm:text-right">
+                        {confidence}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -561,8 +566,8 @@ function HeroVisualPanel() {
 
               <div className="grid gap-4">
                 <div className={cn(INNER_PANEL_CLASSNAME, "p-4")}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-white">Tax liability center</p>
                       <p className="text-sm text-white/45">Live VAT and WHT position</p>
                     </div>
@@ -589,8 +594,8 @@ function HeroVisualPanel() {
                 </div>
 
                 <div className={cn(INNER_PANEL_CLASSNAME, "p-4")}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-white">Filing readiness</p>
                       <p className="text-sm text-white/45">What still needs attention</p>
                     </div>
@@ -606,7 +611,7 @@ function HeroVisualPanel() {
                     ].map(([label, value]) => (
                       <div
                         key={label}
-                        className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
                       >
                         <span className="text-sm text-white/68">{label}</span>
                         <span className="text-xs text-white/42">{value}</span>
@@ -716,26 +721,26 @@ function FeatureSpotlightCard({ feature }: { feature: FeatureSpotlight }) {
 export function PremiumHomepage() {
   return (
     <MarketingShell>
-      <section className="relative mx-auto grid max-w-7xl gap-14 px-6 pb-14 pt-16 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,1.04fr)] lg:items-center lg:pb-20 lg:pt-20">
+      <section className="relative mx-auto grid w-full max-w-7xl min-w-0 overflow-hidden px-4 pb-12 pt-12 sm:px-6 sm:pb-14 sm:pt-16 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,1.04fr)] lg:items-center lg:gap-14 lg:pb-20 lg:pt-20">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-16 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan/24 to-transparent"
         />
-        <div className="space-y-8">
+        <div className="min-w-0 space-y-8">
           <div className="space-y-5">
-            <Badge className="rounded-full border border-cyan/20 bg-cyan/10 px-4 py-1.5 text-cyan hover:bg-cyan/10">
+            <Badge className="max-w-full whitespace-normal rounded-full border border-cyan/20 bg-cyan/10 px-4 py-1.5 text-left leading-6 text-cyan hover:bg-cyan/10">
               The finance operations system for Nigerian businesses
             </Badge>
             <div className="space-y-4">
-              <h1 className="max-w-4xl text-5xl font-semibold tracking-tight text-balance text-white sm:text-6xl xl:text-[4.55rem] xl:leading-[1.02]">
+              <h1 className="max-w-full text-4xl font-semibold tracking-tight text-balance text-white sm:max-w-4xl sm:text-5xl lg:text-6xl xl:text-[4.55rem] xl:leading-[1.02]">
                 Close faster, see tax earlier, and run finance from one premium workspace.
               </h1>
-              <p className="max-w-2xl text-lg leading-8 text-white/68 sm:text-xl">
+              <p className="max-w-full text-base leading-8 text-white/68 sm:max-w-2xl sm:text-xl">
                 TaxBook AI connects transaction intake, AI bookkeeping, reconciliation, VAT and
                 WHT visibility, filing readiness, and accountant collaboration in one serious
                 operating layer built for Nigeria.
               </p>
-              <p className="max-w-2xl text-sm leading-7 text-white/46 sm:text-base">
+              <p className="max-w-full text-sm leading-7 text-white/46 sm:max-w-2xl sm:text-base">
                 Built for SME owners, finance teams, and accounting firms that want stronger
                 control than generic bookkeeping tools and more operational depth than tax-only
                 software.
@@ -743,17 +748,17 @@ export function PremiumHomepage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
             <MarketingCTAGroup
               showViewPricing={false}
               showLogin={false}
-              className="gap-4"
+              className="w-full flex-col gap-3 sm:w-auto sm:flex-row sm:gap-4"
             />
             <Button
               asChild
               size="lg"
               variant="outline"
-              className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+              className="w-full border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white sm:w-auto"
             >
               <Link href="/#preview">
                 See product preview
@@ -770,7 +775,7 @@ export function PremiumHomepage() {
             <span>Designed for operational seriousness, not lightweight bookkeeping</span>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-3">
             {[
               {
                 label: "One operating layer",
